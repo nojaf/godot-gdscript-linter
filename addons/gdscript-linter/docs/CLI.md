@@ -13,6 +13,9 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 
 # Output as JSON
 godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --json
+
+# Output as SARIF 2.1.0 (for GitHub code scanning / JetBrains)
+godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif > results.sarif
 ```
 
 ## Usage
@@ -34,11 +37,13 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | Option | Description |
 |--------|-------------|
 | `--config <path>` | Path to config file (default: `gdlint.json`) |
-| `--format <type>` | Output format: `console`, `json`, `clickable`, `html`, `github` |
+| `--format <type>` | Output format: `console`, `json`, `sarif`, `clickable`, `html`, `github` |
 | `--severity <level>` | Minimum severity to report: `info`, `warning`, `critical` |
 | `--check <checks>` | Comma-separated list of checks to run |
 | `--top <N>` | Show only top N issues sorted by priority |
+| `--spaces <N>` | Indent width for `json`/`sarif` output (`0` = compact single line; default: tab) |
 | `--json` | Shorthand for `--format json` |
+| `--sarif` | Shorthand for `--format sarif` (SARIF 2.1.0, printed to stdout) |
 | `--clickable` | Shorthand for `--format clickable` (Godot Output panel format) |
 | `--html` | Shorthand for `--format html` |
 | `--github` | Shorthand for `--format github` (GitHub Actions annotations) |
@@ -132,6 +137,16 @@ Machine-parseable output for integration with other tools:
 godot --headless --script ... -- --json > report.json
 ```
 
+### SARIF
+
+Standard [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) output, printed to stdout. Integrates with GitHub code scanning, JetBrains IDEs, and other SARIF-aware tools:
+
+```bash
+godot --headless --script ... -- --sarif > results.sarif
+```
+
+File paths are emitted repo-relative (the `res://` prefix is stripped) so alerts resolve against the repository. Severities map as CRITICAL→`error`, WARNING→`warning`, INFO→`note`.
+
 ### Clickable
 
 Godot Output panel format with clickable file:line links:
@@ -185,6 +200,20 @@ jobs:
 	  - name: Run GDScript Linter
 		run: |
 		  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --format github
+```
+
+#### Upload to GitHub code scanning (SARIF)
+
+```yaml
+	  - name: Run GDScript Linter (SARIF)
+		run: |
+		  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif > results.sarif
+		continue-on-error: true  # let the upload step run even when issues are found
+
+	  - name: Upload SARIF
+		uses: github/codeql-action/upload-sarif@v3
+		with:
+		  sarif_file: results.sarif
 ```
 
 ### GitLab CI

@@ -6,7 +6,7 @@ extends SceneTree
 ## Usage: godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- [options] [paths...]
 ## Options:
 ##   --config <path>    Use custom config file (default: gdlint.json)
-##   --format <type>    Output format: console, json, clickable, html, github
+##   --format <type>    Output format: console, json, sarif, clickable, html, github
 ##   --severity <level> Minimum severity to report: info, warning, critical
 ##   --check <checks>   Comma-separated list of checks to run
 ##   --no-ignore        Bypass all gdlint:ignore directives
@@ -26,6 +26,7 @@ var _config_path: String = ""  # Custom config file path
 var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
 var _check_filter: Array[String] = []  # Specific checks to run
 var _top_limit: int = 0  # Limit to top N issues (0 = no limit)
+var _json_indent: String = "\t"  # Indent for json/sarif output ("--spaces N"; "" = compact)
 var _exit_code: int = 0
 
 func _init() -> void:
@@ -75,10 +76,17 @@ func _parse_arguments() -> void:
 					if i + 1 < args.size():
 						_top_limit = int(args[i + 1])
 						i += 1
+				"--spaces":
+					if i + 1 < args.size():
+						# Indent width for json/sarif; 0 = compact single line
+						_json_indent = " ".repeat(maxi(0, int(args[i + 1])))
+						i += 1
 				"--clickable":
 					_output_format = "clickable"
 				"--json":
 					_output_format = "json"
+				"--sarif":
+					_output_format = "sarif"
 				"--html":
 					_output_format = "html"
 				"--github":
@@ -117,11 +125,13 @@ func _print_help() -> void:
 	print("")
 	print("Options:")
 	print("  --config <path>   Path to config file (default: gdlint.json)")
-	print("  --format <type>   Output format: console, json, clickable, html, github (default: console)")
+	print("  --format <type>   Output format: console, json, sarif, clickable, html, github (default: console)")
 	print("  --severity <lvl>  Minimum severity to report: info, warning, critical")
 	print("  --check <checks>  Comma-separated list of checks to run (e.g., long-function,high-complexity)")
 	print("  --top <N>         Show only top N issues sorted by priority")
+	print("  --spaces <N>      Indent width for json/sarif output (0 = compact; default: tab)")
 	print("  --json            Shorthand for --format json")
+	print("  --sarif           Shorthand for --format sarif (SARIF 2.1.0 for GitHub/JetBrains)")
 	print("  --clickable       Shorthand for --format clickable (Godot Output panel format)")
 	print("  --html            Shorthand for --format html (generates HTML report)")
 	print("  --github          Shorthand for --format github (GitHub Actions annotations)")
@@ -185,6 +195,8 @@ func _run_analysis() -> void:
 	match _output_format:
 		"json":
 			_output_json(merged_result)
+		"sarif":
+			_output_sarif(merged_result)
 		"clickable":
 			_output_clickable(merged_result)
 		"html":
@@ -321,7 +333,81 @@ func _extract_issue_value(issue) -> int:
 
 # gdlint:ignore-function:print-statement - CLI JSON output
 func _output_json(result) -> void:
-	print(JSON.stringify(result.to_dict(), "\t"))
+	print(JSON.stringify(result.to_dict(), _json_indent))
+
+# gdlint:ignore-function:print-statement - CLI SARIF 2.1.0 output
+func _output_sarif(result) -> void:
+	# Static Analysis Results Interchange Format 2.1.0 (https://sarifweb.azurewebsites.net/)
+	# Imports into GitHub code scanning and JetBrains IDEs.
+	var sarif := {
+		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+		"version": "2.1.0",
+		"runs": [{
+			"tool": {
+				"driver": {
+					"name": "GDScript Linter",
+					"version": _get_tool_version(),
+					"informationUri": "https://poplava.itch.io",
+					"rules": _sarif_rules(result),
+				}
+			},
+			"results": _sarif_results(result),
+		}],
+	}
+	print(JSON.stringify(sarif, _json_indent))
+
+# Distinct rule ids seen in this run, as minimal reportingDescriptor entries.
+func _sarif_rules(result) -> Array:
+	var seen := {}
+	var rules := []
+	for issue in result.issues:
+		if not seen.has(issue.check_id):
+			seen[issue.check_id] = true
+			rules.append({"id": issue.check_id})
+	return rules
+
+func _sarif_results(result) -> Array:
+	var results := []
+	for issue in result.issues:
+		var region := {"startLine": issue.line}
+		# SARIF columns are 1-based; our column is 0-based and usually 0 (unset).
+		# Omit when 0 so strict validators accept the file.
+		if issue.column > 0:
+			region["startColumn"] = issue.column + 1
+		results.append({
+			"ruleId": issue.check_id,
+			"level": _sarif_level(issue.severity),
+			"message": {"text": issue.message},
+			"locations": [{
+				"physicalLocation": {
+					"artifactLocation": {"uri": _sarif_uri(issue.file_path)},
+					"region": region,
+				}
+			}],
+		})
+	return results
+
+func _sarif_level(severity: int) -> String:
+	match severity:
+		IssueClass.Severity.CRITICAL:
+			return "error"
+		IssueClass.Severity.WARNING:
+			return "warning"
+		_:
+			return "note"
+
+# Repo-relative URI: strip res:// and normalize separators to forward slashes.
+func _sarif_uri(file_path: String) -> String:
+	var uri := file_path
+	if uri.begins_with("res://"):
+		uri = uri.substr(6)
+	return uri.replace("\\", "/")
+
+func _get_tool_version() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load("res://addons/gdscript-linter/plugin.cfg") == OK:
+		return str(cfg.get_value("plugin", "version", "unknown"))
+	return "unknown"
 
 # gdlint:ignore-function:print-statement,long-function - CLI clickable output
 func _output_clickable(result) -> void:
