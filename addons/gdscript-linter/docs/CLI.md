@@ -49,6 +49,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--github` | Shorthand for `--format github` (GitHub Actions annotations) |
 | `--output, -o <file>` | Output file path (for `--html`) |
 | `--no-ignore` | Bypass all `gdlint:ignore` directives |
+| `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
 | `--help, -h` | Show help message |
 
 ## Exit Codes
@@ -121,6 +122,94 @@ Use the "Export Config..." button in the editor to save custom configs (e.g., `g
 ```bash
 # Use a strict config for CI
 godot --headless --script ... -- --config gdlint-strict.json
+```
+
+## Member Checking (`--check-members`)
+
+A "will this actually run?" pass, intended right before launching the game. Unlike
+every other check it asks the engine rather than reading text, so it needs the files
+on disk to be current and the project to have been imported.
+
+```bash
+godot --headless --script ... -- --check-members
+```
+
+It reports two things, both CRITICAL (exit code 2):
+
+| Check | What it catches |
+|-------|-----------------|
+| `script-load-failed` | The script does not compile, so nothing in it can be checked. Godot's parse error goes to **stderr**; the linter adds the structured finding. Equivalent to running `--check-only` on every file at once. |
+| `unknown-member` | A name in a `self.foo.bar` chain is not a member of the type it is read from. |
+
+### Why this is needed
+
+GDScript does not verify either of these at parse time. Both compile clean and fail
+only when the line executes:
+
+```gdscript
+@onready var clock: Label = $Clock
+
+func _process(_delta: float) -> void:
+	clock_labl.text = "x"       # Parse Error: Identifier not declared
+	self.clock_labl.text = "x"  # compiles clean -- property access through self
+	                            # is resolved at runtime
+	self.clock.ziggy = "x"      # compiles clean -- property writes on typed
+	                            # object variables are not verified either
+```
+
+The first line is the only one Godot catches. A codebase that writes `self.` on
+member access is opted out of even that.
+
+### How it resolves
+
+Member sets come from the engine, never from parsing declarations:
+`get_script_property_list()` and friends for scripts (which already include members
+inherited from base scripts), plus `ClassDB` for the native base class.
+
+Chains are walked one hop at a time. Each step needs a declared type to continue —
+the property list reports `Label` for `var clock: Label` and `Tide` for a script
+class, and script classes are resolved to their files through the project's global
+class list. The walk stops silently as soon as a type cannot be determined, so an
+untyped `var thing` yields no verdict rather than a guess.
+
+### Base types are reported on purpose
+
+A member declared as a base class but holding a subtype is reported, even though it
+works at runtime:
+
+```gdscript
+var widget: Node          # actually holds a Label
+
+func _ready() -> void:
+	self.widget = $Clock
+	self.widget.text = "x"  # 'text' is not a member of Node
+```
+
+This is intended. The declaration is either missing a cast or naming a type wider
+than what the member really holds, and both are worth fixing:
+
+```gdscript
+var widget: Label                    # say what it is, or
+(self.widget as Label).text = "x"    # cast at the point of use
+```
+
+Suppress it with `# gdlint:ignore-line:unknown-member` when neither applies.
+
+### Limitations
+
+- Scripts overriding `_get_property_list`, `_set` or `_get` can answer to names that
+  appear in no member list, so they are skipped entirely.
+- Loading a script runs its `@tool` static initializers — the same exposure as
+  launching the project, but not zero.
+- A broken base script breaks everything extending it; only the root cause is
+  reported, with a count of the dependents.
+- A stale script class cache makes every script fail to load. Re-import first
+  (`godot --headless --path <dir> --import`).
+
+Suppress a false positive with the usual directives:
+
+```gdscript
+self.widget.text = "x"  # gdlint:ignore-line:unknown-member
 ```
 
 ## Output Formats
@@ -298,6 +387,8 @@ For use with `--check`:
 | `naming-enum` | Enum naming convention |
 | `unused-variable` | Local variables never used |
 | `unused-parameter` | Function parameters never used |
+| `script-load-failed` | Script does not compile (`--check-members` only) |
+| `unknown-member` | A name in a `self.foo.bar` chain resolves to nothing (`--check-members` only) |
 
 ## Common Mistakes
 

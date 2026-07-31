@@ -10,6 +10,7 @@ extends SceneTree
 ##   --severity <level> Minimum severity to report: info, warning, critical
 ##   --check <checks>   Comma-separated list of checks to run
 ##   --no-ignore        Bypass all gdlint:ignore directives
+##   --check-members    Load every script; report compile failures and self.foo.bar that resolves to nothing
 
 const AnalysisConfigClass = preload("res://addons/gdscript-linter/analyzer/analysis-config.gd")
 const CodeAnalyzerClass = preload("res://addons/gdscript-linter/analyzer/code-analyzer.gd")
@@ -22,6 +23,7 @@ var _target_paths: Array[String] = []  # Multiple paths to analyze
 var _output_format: String = "console"  # "console", "json", "clickable", "html", "github"
 var _output_file: String = ""  # For HTML output
 var _no_ignore: bool = false  # Bypass all gdlint:ignore directives
+var _check_members: bool = false  # Also load every script and verify self.foo.bar chains
 var _config_path: String = ""  # Custom config file path
 var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
 var _check_filter: Array[String] = []  # Specific checks to run
@@ -97,6 +99,8 @@ func _parse_arguments() -> void:
 						i += 1
 				"--no-ignore":
 					_no_ignore = true
+				"--check-members":
+					_check_members = true
 				"--help", "-h":
 					_print_help()
 					quit(0)
@@ -137,6 +141,8 @@ func _print_help() -> void:
 	print("  --github          Shorthand for --format github (GitHub Actions annotations)")
 	print("  --output, -o <f>  Output file path (for --html, default: code_quality_report.html)")
 	print("  --no-ignore       Bypass all gdlint:ignore directives (show everything)")
+	print("  --check-members   Also load every script: report ones that fail to compile")
+	print("                    and self.foo.bar accesses that resolve to nothing")
 	print("  --path <dir>      Legacy: analyze single path (use positional args instead)")
 	print("  --help, -h        Show this help message")
 	print("")
@@ -184,6 +190,9 @@ func _run_analysis() -> void:
 		else:
 			_merge_results(merged_result, result)
 
+	if _check_members:
+		_run_member_check(merged_result, config)
+
 	# Apply severity filter if specified
 	if not _severity_filter.is_empty():
 		_apply_severity_filter(merged_result)
@@ -207,6 +216,18 @@ func _run_analysis() -> void:
 			_output_console(merged_result)
 
 	_exit_code = merged_result.get_exit_code()
+
+
+# The member check runs over exactly the files the analysis covered, so it inherits the
+# same scoping (excludes, .gdignore, addon rules) for free.
+func _run_member_check(result, config) -> void:
+	var paths: Array = []
+	for file_result in result.file_results:
+		paths.append(file_result.file_path)
+
+	var member_check := GDLintMemberCheck.new()
+	for issue in member_check.run(paths, config.respect_ignore_directives):
+		result.add_issue(issue)
 
 
 # Load config from specified path or auto-detect

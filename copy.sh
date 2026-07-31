@@ -99,6 +99,11 @@ cat > "$LINT_SCRIPT" <<'LINT_EOF'
 #   ./lint.sh src/ scripts/         # limit to directories
 #   ./lint.sh --sarif > out.sarif
 #
+# Runs with --check-members: every script is loaded, so scripts that fail to
+# compile and self.foo.bar accesses that resolve to nothing are reported as
+# critical. That is the point of running this before launching the game.
+# NO_MEMBER_CHECK=1 skips it.
+#
 # Set GODOT=/path/to/godot to pin a specific binary.
 #
 # Exit codes: 0 = clean, 1 = warnings, 2 = critical issues.
@@ -177,6 +182,15 @@ for arg in "$@"; do
 done
 if [ "$has_format" = "0" ]; then
 	set -- --clickable "$@"
+fi
+
+# Member checking by default -- this script exists to be run before launching the
+# game, and a script that will not compile is what is most worth knowing then.
+if [ "${NO_MEMBER_CHECK:-0}" != "1" ]; then
+	case " $* " in
+		*" --check-members "*) ;;
+		*) set -- --check-members "$@" ;;
+	esac
 fi
 
 # --path makes the run independent of the caller's cwd; everything after --
