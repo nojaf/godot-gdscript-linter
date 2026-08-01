@@ -141,6 +141,7 @@ It reports two things, both CRITICAL (exit code 2):
 |-------|-----------------|
 | `script-load-failed` | The script does not compile, so nothing in it can be checked. Godot's parse error goes to **stderr**; the linter adds the structured finding. Equivalent to running `--check-only` on every file at once. |
 | `unknown-member` | A name in a `self.foo.bar` chain is not a member of the type it is read from. |
+| `wrong-argument-count` | A signal is emitted with the wrong number of arguments. |
 
 ### Why this is needed
 
@@ -160,6 +161,30 @@ func _process(_delta: float) -> void:
 
 The first line is the only one Godot catches. A codebase that writes `self.` on
 member access is opted out of even that.
+
+### Signal emit arity
+
+Adding a parameter to a signal does not update the places that emit it, and Godot
+says nothing until the line runs:
+
+```gdscript
+signal stopped_walking(critter: Critter)
+
+func park() -> void:
+	self.stopped_walking.emit()   # emitted with 0 arguments, expected 1
+```
+
+Both `self.some_signal.emit(...)` and the unqualified `some_signal.emit(...)` are
+checked, including signals belonging to another type reached through a chain
+(`self.other.some_signal.emit(...)`). Argument lists that wrap across lines are
+counted correctly; one that cannot be delimited yields no verdict.
+
+**Method calls are deliberately not checked.** Godot's own parser already catches
+those — `self.foo(1)`, bare `foo(1)`, and `self.typed_member.foo(1)` all fail to
+compile with "Too few arguments" — and the script then shows up here as
+`script-load-failed`. Only signal emits slip through, so only signal emits are
+checked. The one case neither catches is a call through an untyped variable, which
+nothing can resolve.
 
 ### How it resolves
 
@@ -474,6 +499,7 @@ For use with `--check`:
 | `unused-parameter` | Function parameters never used |
 | `script-load-failed` | Script does not compile (`--check-members` only) |
 | `unknown-member` | A name in a `self.foo.bar` chain resolves to nothing (`--check-members` only) |
+| `wrong-argument-count` | Signal emitted with the wrong argument count (`--check-members` only) |
 | `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
 
 ## Common Mistakes

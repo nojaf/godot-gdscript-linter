@@ -5,11 +5,12 @@ extends RefCounted
 ## Verifies that every `self.foo.bar` chain actually resolves, by asking the
 ## engine what members a type has instead of parsing declarations.
 ##
-## Two findings, both CRITICAL:
-##   script-load-failed - the script does not compile, so nothing in it can be
-##                        checked (Godot prints the parse error itself, on stderr)
-##   unknown-member     - a name in the chain is not a member of the type it is
-##                        being read from
+## Three findings, all CRITICAL:
+##   script-load-failed   - the script does not compile, so nothing in it can be
+##                          checked (Godot prints the parse error, on stderr)
+##   unknown-member       - a name in the chain is not a member of the type it is
+##                          being read from
+##   wrong-argument-count - a signal is emitted with the wrong argument count
 ##
 ## Why this is needed at all: GDScript resolves property access through `self`
 ## at runtime, and does not verify property access on typed object variables
@@ -17,6 +18,11 @@ extends RefCounted
 ##
 ##     self.clock_labl.text = "x"   # no such member on this script
 ##     self.clock.ziggy = "x"       # clock is a Label; Label has no 'ziggy'
+##     self.stopped_walking.emit()  # the signal takes one argument
+##
+## Method call arity is NOT checked here: Godot's parser already rejects those,
+## so a bad call surfaces as script-load-failed. Signal emits are the only arity
+## it lets through.
 ##
 ## Requires files on disk to be current and the project to have been imported —
 ## a stale script class cache makes every script fail to load.
@@ -25,6 +31,10 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_LOAD_FAILED := "script-load-failed"
 const CHECK_UNKNOWN_MEMBER := "unknown-member"
+const CHECK_ARGUMENT_COUNT := "wrong-argument-count"
+
+## How far a call's argument list may span before we give up counting it.
+const MAX_CALL_LINES := 60
 
 ## Scripts overriding any of these can answer to names that exist in no member
 ## list, so they are skipped entirely.
@@ -136,6 +146,10 @@ func _check_file(path: String, script: Script) -> Array:
 	var chain_regex := RegEx.new()
 	chain_regex.compile("\\bself((?:\\.[A-Za-z_][A-Za-z0-9_]*)+)")
 
+	# A bare `some_signal.emit(` -- not preceded by a dot or another identifier.
+	var bare_emit_regex := RegEx.new()
+	bare_emit_regex.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)\\.emit\\s*\\(")
+
 	var root := _members_of_script(script)
 	var root_label := _script_label(path, script)
 
@@ -157,7 +171,30 @@ func _check_file(path: String, script: Script) -> Array:
 		var code := _strip_strings_and_comments(line)
 		for found in chain_regex.search_all(code):
 			var segments: PackedStringArray = found.get_string(1).substr(1).split(".")
-			var issue = _check_chain(path, i + 1, segments, root, root_label)
+			# A '(' right after the chain makes the last segment a call, and the
+			# argument list may run past the end of this line.
+			var argument_count := -1
+			var paren := _next_non_space(code, found.get_end())
+			if paren != -1 and code[paren] == "(":
+				argument_count = _count_call_arguments(lines, i, paren)
+			var issue = _check_chain(path, i + 1, segments, root, root_label, argument_count)
+			if issue != null:
+				issues.append(issue)
+
+		# Signals are just as often emitted without the `self.` prefix, and Godot
+		# misses that form too. The lookbehind keeps this from re-matching the
+		# tail of a chain already handled above.
+		for found in bare_emit_regex.search_all(code):
+			var signal_name := found.get_string(1)
+			if not root.signals.has(signal_name):
+				continue
+			var paren := _next_non_space(code, found.get_end() - 1)
+			if paren == -1 or code[paren] != "(":
+				continue
+			var given := _count_call_arguments(lines, i, paren)
+			if given < 0:
+				continue
+			var issue = _check_signal_arity(path, i + 1, signal_name, given, root.signals[signal_name])
 			if issue != null:
 				issues.append(issue)
 
@@ -168,11 +205,16 @@ func _check_file(path: String, script: Script) -> Array:
 
 # Walk the chain, hopping from one type's member set to the next. Stops silently
 # the moment a type can no longer be resolved -- no resolution, no verdict.
-func _check_chain(path: String, line_num: int, segments: PackedStringArray, root: Dictionary, root_label: String):
+# argument_count is -1 when the chain is not a call, or when the argument list
+# could not be counted.
+func _check_chain(path: String, line_num: int, segments: PackedStringArray, root: Dictionary, root_label: String, argument_count: int = -1):
 	var current := root
 	var owner_label := root_label
+	var last := segments.size() - 1
 
-	for segment in segments:
+	for index in range(segments.size()):
+		var segment := segments[index]
+
 		if not current.names.has(segment):
 			if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_UNKNOWN_MEMBER):
 				return null
@@ -182,6 +224,13 @@ func _check_chain(path: String, line_num: int, segments: PackedStringArray, root
 				message += " (did you mean '%s'?)" % suggestion
 			return IssueClass.create(
 				path, line_num, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_MEMBER, message)
+
+		# <signal>.emit(...) -- checked here because a signal has no type to step
+		# into, so the walk would otherwise stop before reaching .emit.
+		if index == last - 1 and argument_count >= 0 \
+				and segments[last] == "emit" and current.signals.has(segment):
+			return _check_signal_arity(path, line_num, segment, argument_count,
+				current.signals[segment])
 
 		# Only object-typed properties carry a class we can step into. Methods,
 		# signals, constants and built-in types end the walk.
@@ -197,11 +246,64 @@ func _check_chain(path: String, line_num: int, segments: PackedStringArray, root
 	return null
 
 
+# Signals have no default arguments, so the expected count is exact.
+func _check_signal_arity(path: String, line_num: int, signal_name: String, given: int, expected: int):
+	if given == expected:
+		return null
+	if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_ARGUMENT_COUNT):
+		return null
+	return IssueClass.create(
+		path, line_num, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
+		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected])
+
+
+func _next_non_space(text: String, from: int) -> int:
+	for i in range(from, text.length()):
+		if text[i] != " " and text[i] != "\t":
+			return i
+	return -1
+
+
+# Counts top-level commas between the matching parentheses, following the call
+# across lines when it wraps. Returns -1 when the list cannot be delimited, so an
+# unbalanced or over-long call yields no verdict rather than a wrong one.
+func _count_call_arguments(lines: Array, start_line: int, paren_index: int) -> int:
+	var depth := 0
+	var commas := 0
+	var has_content := false
+	var limit: int = mini(lines.size(), start_line + MAX_CALL_LINES)
+
+	for i in range(start_line, limit):
+		# Strings and comments are removed so their commas and brackets never count.
+		var code := _strip_strings_and_comments(String(lines[i]))
+		var start := paren_index if i == start_line else 0
+		if start >= code.length():
+			continue
+
+		for j in range(start, code.length()):
+			var ch := code[j]
+			match ch:
+				"(", "[", "{":
+					depth += 1
+				")", "]", "}":
+					depth -= 1
+					if depth == 0:
+						return commas + 1 if has_content else 0
+				",":
+					if depth == 1:
+						commas += 1
+				_:
+					if depth >= 1 and ch != " " and ch != "\t":
+						has_content = true
+	return -1
+
+
 # Members of a loaded script: its own plus, already merged by the engine, those
 # inherited from base scripts, plus the native class the chain bottoms out in.
 func _members_of_script(script: Script) -> Dictionary:
 	var names := {}
 	var types := {}
+	var signals := {}
 
 	for prop in script.get_script_property_list():
 		# Drops the per-file category rows the property list interleaves.
@@ -212,6 +314,7 @@ func _members_of_script(script: Script) -> Dictionary:
 		names[method.name] = true
 	for signal_info in script.get_script_signal_list():
 		names[signal_info.name] = true
+		signals[signal_info.name] = signal_info.args.size()
 	for constant in script.get_script_constant_map().keys():
 		names[String(constant)] = true
 
@@ -220,15 +323,16 @@ func _members_of_script(script: Script) -> Dictionary:
 		var native_members := _members_of_native(native)
 		names.merge(native_members.names)
 		types.merge(native_members.types)
+		signals.merge(native_members.signals)
 
-	return {"names": names, "types": types}
+	return {"names": names, "types": types, "signals": signals}
 
 
 func _members_of_class(class_name_str: String) -> Dictionary:
 	if _member_cache.has(class_name_str):
 		return _member_cache[class_name_str]
 
-	var resolved := {"names": {}, "types": {}}
+	var resolved := {"names": {}, "types": {}, "signals": {}}
 	if _global_classes.has(class_name_str):
 		var script: Script = load(_global_classes[class_name_str]) as Script
 		if script != null and not script.get_instance_base_type().is_empty():
@@ -247,6 +351,7 @@ func _members_of_native(native: String) -> Dictionary:
 
 	var names := {}
 	var types := {}
+	var signals := {}
 	for prop in ClassDB.class_get_property_list(native):
 		names[prop.name] = true
 		_record_type(types, prop)
@@ -254,10 +359,11 @@ func _members_of_native(native: String) -> Dictionary:
 		names[method.name] = true
 	for signal_info in ClassDB.class_get_signal_list(native):
 		names[signal_info.name] = true
+		signals[signal_info.name] = signal_info.args.size()
 	for constant in ClassDB.class_get_integer_constant_list(native):
 		names[constant] = true
 
-	var resolved := {"names": names, "types": types}
+	var resolved := {"names": names, "types": types, "signals": signals}
 	_member_cache[cache_key] = resolved
 	return resolved
 
