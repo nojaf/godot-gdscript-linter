@@ -13,6 +13,7 @@ Branch point: `aeeae7d` (tip of `main`).
 | `9b0d139` | SARIF 2.1.0 output (`--sarif`), `--spaces <N>`, `scripts/validate_sarif.py` | Yes |
 | `9b672f3` | `copy.sh` generates a `lint.sh` wrapper in the target project | No — local workflow |
 | `021d408` | `--check-members`: verify `self.foo.bar` chains resolve | Yes |
+| `0afb2e9` | `--check-unused-functions`: report functions nothing references | Yes |
 
 The two feature commits are additive and off by default (`--sarif` and
 `--check-members` are opt-in flags), so they change nothing for existing users.
@@ -113,6 +114,34 @@ only the root cause with a dependent count; a stale class cache makes everything
 fail to load.
 
 See `addons/gdscript-linter/docs/CLI.md` for the user-facing documentation.
+
+---
+
+## `0afb2e9` — `--check-unused-functions`
+
+Reports functions nothing in the project references, as a WARNING. Dead code does
+not stop the game running, so it does not gate launching.
+
+**Conservative by design.** Every occurrence of the name anywhere counts as a
+reference — calls, bare `Callable` references, names inside strings
+(`call("foo")`), and `method="..."` wiring in `.tscn`/`.tres`, which is how the
+editor connects signals. Comments are stripped first, so a function mentioned only
+in prose is still dead. References are searched project-wide regardless of the
+analyzed paths, so narrowing the scan cannot manufacture a false positive. The
+errors it makes are misses, not bad advice to delete live code.
+
+Never reported: engine virtuals, and placeholder bodies containing only `pass`
+(the `empty-function` check covers those).
+
+**The trap worth remembering:** `ClassDB.class_has_method("Node", "_ready")`
+returns **false**, while `class_get_method_list("Node")` includes `_ready`.
+`class_has_method` filters virtuals out. Using it here would have marked every
+lifecycle override in the project as dead code.
+
+Found four genuine dead functions in the addon itself — `get_location_string`,
+`get_severity_icon` (`issue.gd`), `get_issues_for_file` (`analysis-result.gd`),
+`_add_code_block` (`help-card-builder.gd`) — each appearing exactly once in the
+whole repo. None in a real game project, no false positives in either.
 
 ---
 
