@@ -11,6 +11,7 @@ extends RefCounted
 ##   unknown-member       - a name in the chain is not a member of the type it is
 ##                          being read from
 ##   wrong-argument-count - a signal is emitted with the wrong argument count
+##   method-not-called    - a method is used as a condition without being called
 ##
 ## Why this is needed at all: GDScript resolves property access through `self`
 ## at runtime, and does not verify property access on typed object variables
@@ -19,6 +20,7 @@ extends RefCounted
 ##     self.clock_labl.text = "x"   # no such member on this script
 ##     self.clock.ziggy = "x"       # clock is a Label; Label has no 'ziggy'
 ##     self.stopped_walking.emit()  # the signal takes one argument
+##     if self.any_enemy_walking:   # a Callable, so the branch is always taken
 ##
 ## Method call arity is NOT checked here: Godot's parser already rejects those,
 ## so a bad call surfaces as script-load-failed. Signal emits are the only arity
@@ -32,6 +34,7 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 const CHECK_LOAD_FAILED := "script-load-failed"
 const CHECK_UNKNOWN_MEMBER := "unknown-member"
 const CHECK_ARGUMENT_COUNT := "wrong-argument-count"
+const CHECK_METHOD_NOT_CALLED := "method-not-called"
 
 ## How far a call's argument list may span before we give up counting it.
 const MAX_CALL_LINES := 60
@@ -150,6 +153,11 @@ func _check_file(path: String, script: Script) -> Array:
 	var bare_emit_regex := RegEx.new()
 	bare_emit_regex.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)\\.emit\\s*\\(")
 
+	# `if predicate:` -- a lone identifier in a truth test, not called, not dotted.
+	var bare_condition_regex := RegEx.new()
+	bare_condition_regex.compile(
+		"(?:^|[\\s(])(?:if|elif|while|and|or|not)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?![\\w.(])")
+
 	var root := _members_of_script(script)
 	var root_label := _script_label(path, script)
 
@@ -173,13 +181,31 @@ func _check_file(path: String, script: Script) -> Array:
 			var segments: PackedStringArray = found.get_string(1).substr(1).split(".")
 			# A '(' right after the chain makes the last segment a call, and the
 			# argument list may run past the end of this line.
+			var is_call := false
 			var argument_count := -1
 			var paren := _next_non_space(code, found.get_end())
 			if paren != -1 and code[paren] == "(":
+				is_call = true
 				argument_count = _count_call_arguments(lines, i, paren)
-			var issue = _check_chain(path, i + 1, segments, root, root_label, argument_count)
+			var in_condition := _is_condition_context(code, found.get_start())
+			var issue = _check_chain(path, i + 1, segments, root, root_label,
+				argument_count, is_call, in_condition)
 			if issue != null:
 				issues.append(issue)
+
+		# The same mistake without the `self.` prefix: `if predicate:`. Restricted
+		# to a lone identifier that is a method of this script -- a dotted receiver
+		# has no `self` to resolve it against.
+		for found in bare_condition_regex.search_all(code):
+			var candidate := found.get_string(1)
+			if not root.methods.has(candidate):
+				continue
+			if _respect_ignores and _ignore_handler.should_ignore(i + 1, CHECK_METHOD_NOT_CALLED):
+				continue
+			issues.append(IssueClass.create(
+				path, i + 1, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
+				"'%s' is a method used as a condition without being called; " % candidate
+				+ "the reference is always true (did you mean '%s()'?)" % candidate))
 
 		# Signals are just as often emitted without the `self.` prefix, and Godot
 		# misses that form too. The lookbehind keeps this from re-matching the
@@ -207,7 +233,7 @@ func _check_file(path: String, script: Script) -> Array:
 # the moment a type can no longer be resolved -- no resolution, no verdict.
 # argument_count is -1 when the chain is not a call, or when the argument list
 # could not be counted.
-func _check_chain(path: String, line_num: int, segments: PackedStringArray, root: Dictionary, root_label: String, argument_count: int = -1):
+func _check_chain(path: String, line_num: int, segments: PackedStringArray, root: Dictionary, root_label: String, argument_count: int = -1, is_call: bool = false, in_condition: bool = false):
 	var current := root
 	var owner_label := root_label
 	var last := segments.size() - 1
@@ -224,6 +250,16 @@ func _check_chain(path: String, line_num: int, segments: PackedStringArray, root
 				message += " (did you mean '%s'?)" % suggestion
 			return IssueClass.create(
 				path, line_num, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_MEMBER, message)
+
+		# A method used as a condition without being called. The reference is a
+		# Callable, which is always truthy, so the branch never actually branches.
+		if index == last and not is_call and in_condition and current.methods.has(segment):
+			if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_METHOD_NOT_CALLED):
+				return null
+			return IssueClass.create(
+				path, line_num, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
+				"'%s' is a method used as a condition without being called; " % segment
+				+ "the reference is always true (did you mean '%s()'?)" % segment)
 
 		# <signal>.emit(...) -- checked here because a signal has no type to step
 		# into, so the walk would otherwise stop before reaching .emit.
@@ -255,6 +291,18 @@ func _check_signal_arity(path: String, line_num: int, signal_name: String, given
 	return IssueClass.create(
 		path, line_num, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
 		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected])
+
+
+# True when what precedes the match makes it a truth test: if/elif/while, a
+# boolean operator, or assert(. Those are the places where a Callable silently
+# evaluates to true instead of failing.
+func _is_condition_context(code: String, match_start: int) -> bool:
+	var before := code.substr(0, match_start)
+	var keyword := RegEx.new()
+	keyword.compile("(?:^|[\\s(])(if|elif|while|and|or|not)\\s+$")
+	if keyword.search(before) != null:
+		return true
+	return before.strip_edges(false, true).ends_with("assert(")
 
 
 func _next_non_space(text: String, from: int) -> int:
@@ -304,6 +352,7 @@ func _members_of_script(script: Script) -> Dictionary:
 	var names := {}
 	var types := {}
 	var signals := {}
+	var methods := {}
 
 	for prop in script.get_script_property_list():
 		# Drops the per-file category rows the property list interleaves.
@@ -312,6 +361,7 @@ func _members_of_script(script: Script) -> Dictionary:
 			_record_type(types, prop)
 	for method in script.get_script_method_list():
 		names[method.name] = true
+		methods[method.name] = true
 	for signal_info in script.get_script_signal_list():
 		names[signal_info.name] = true
 		signals[signal_info.name] = signal_info.args.size()
@@ -324,15 +374,16 @@ func _members_of_script(script: Script) -> Dictionary:
 		names.merge(native_members.names)
 		types.merge(native_members.types)
 		signals.merge(native_members.signals)
+		methods.merge(native_members.methods)
 
-	return {"names": names, "types": types, "signals": signals}
+	return {"names": names, "types": types, "signals": signals, "methods": methods}
 
 
 func _members_of_class(class_name_str: String) -> Dictionary:
 	if _member_cache.has(class_name_str):
 		return _member_cache[class_name_str]
 
-	var resolved := {"names": {}, "types": {}, "signals": {}}
+	var resolved := {"names": {}, "types": {}, "signals": {}, "methods": {}}
 	if _global_classes.has(class_name_str):
 		var script: Script = load(_global_classes[class_name_str]) as Script
 		if script != null and not script.get_instance_base_type().is_empty():
@@ -352,18 +403,20 @@ func _members_of_native(native: String) -> Dictionary:
 	var names := {}
 	var types := {}
 	var signals := {}
+	var methods := {}
 	for prop in ClassDB.class_get_property_list(native):
 		names[prop.name] = true
 		_record_type(types, prop)
 	for method in ClassDB.class_get_method_list(native):
 		names[method.name] = true
+		methods[method.name] = true
 	for signal_info in ClassDB.class_get_signal_list(native):
 		names[signal_info.name] = true
 		signals[signal_info.name] = signal_info.args.size()
 	for constant in ClassDB.class_get_integer_constant_list(native):
 		names[constant] = true
 
-	var resolved := {"names": names, "types": types, "signals": signals}
+	var resolved := {"names": names, "types": types, "signals": signals, "methods": methods}
 	_member_cache[cache_key] = resolved
 	return resolved
 

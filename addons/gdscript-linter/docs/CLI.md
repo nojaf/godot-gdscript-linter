@@ -142,6 +142,7 @@ It reports two things, both CRITICAL (exit code 2):
 | `script-load-failed` | The script does not compile, so nothing in it can be checked. Godot's parse error goes to **stderr**; the linter adds the structured finding. Equivalent to running `--check-only` on every file at once. |
 | `unknown-member` | A name in a `self.foo.bar` chain is not a member of the type it is read from. |
 | `wrong-argument-count` | A signal is emitted with the wrong number of arguments. |
+| `method-not-called` | A method is used as a condition without being called. |
 
 ### Why this is needed
 
@@ -185,6 +186,33 @@ compile with "Too few arguments" — and the script then shows up here as
 `script-load-failed`. Only signal emits slip through, so only signal emits are
 checked. The one case neither catches is a call through an untyped variable, which
 nothing can resolve.
+
+### Methods used as conditions
+
+Forgetting the parentheses on a predicate does not fail — the reference is a
+`Callable`, which is always truthy, so the branch stops branching:
+
+```gdscript
+func any_enemy_walking() -> bool: ...
+
+if self.critters.any_enemy_walking:    # always true -- the () is missing
+	self._enter_wave_end()
+```
+
+Godot reports nothing here, in any form: through `self.`, unqualified, or through
+a typed member. Flagged when a method appears in a truth test — after `if`,
+`elif`, `while`, `and`, `or`, `not`, or inside `assert(`.
+
+Passing a method around *without* calling it is normal and is not reported:
+
+```gdscript
+var cb := self.predicate                 # fine
+button.pressed.connect(self._on_press)   # fine
+```
+
+Only a lone identifier (`if predicate:`) is checked in the unqualified form; a
+dotted receiver without `self.` (`if critters.any_enemy_walking:`) has nothing to
+resolve the receiver against and is skipped.
 
 ### How it resolves
 
@@ -506,6 +534,7 @@ For use with `--check`:
 | `script-load-failed` | Script does not compile (`--check-members` only) |
 | `unknown-member` | A name in a `self.foo.bar` chain resolves to nothing (`--check-members` only) |
 | `wrong-argument-count` | Signal emitted with the wrong argument count (`--check-members` only) |
+| `method-not-called` | Method used as a condition without being called (`--check-members` only) |
 | `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
 
 ## Common Mistakes
