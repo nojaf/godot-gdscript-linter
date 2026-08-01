@@ -91,7 +91,7 @@ func _check_file(path: String) -> Array:
 			continue
 		if virtuals.has(name):
 			continue
-		if _is_referenced(name):
+		if _is_referenced(name, declaration.self_occurrences):
 			continue
 		if _respect_ignores and _ignore_handler.should_ignore(declaration.line, CHECK_UNUSED_FUNCTION):
 			continue
@@ -105,12 +105,14 @@ func _check_file(path: String) -> Array:
 	return issues
 
 
-# Every declaration contributes one occurrence of its own name, so a function is
-# referenced only when it appears more often than it is declared.
-func _is_referenced(name: String) -> bool:
+# Every declaration contributes one occurrence of its own name, and mentions
+# inside the function's own body are not somebody else calling it -- a function
+# that only recurses, or that returns its own name as a string, is still dead.
+# What is left after discounting both is a genuine reference.
+func _is_referenced(name: String, self_occurrences: int) -> bool:
 	var occurrences: int = _token_counts.get(name, 0)
 	var declarations: int = _declaration_counts.get(name, 1)
-	return occurrences > declarations
+	return occurrences - declarations - self_occurrences > 0
 
 
 func _find_declarations(lines: Array) -> Array:
@@ -122,12 +124,32 @@ func _find_declarations(lines: Array) -> Array:
 		var found := func_regex.search(String(lines[i]))
 		if found == null:
 			continue
+		var name := found.get_string(1)
 		declarations.append({
-			"name": found.get_string(1),
+			"name": name,
 			"line": i + 1,
 			"is_placeholder": _is_placeholder_body(lines, i),
+			"self_occurrences": _count_in_body(lines, i, name, func_regex),
 		})
 	return declarations
+
+
+# How often the function names itself inside its own body. Comments are stripped
+# to match how the project-wide index was built, so the two counts are comparable.
+func _count_in_body(lines: Array, declaration_index: int, name: String, func_regex: RegEx) -> int:
+	var count := 0
+	for i in range(declaration_index + 1, lines.size()):
+		var raw: String = String(lines[i])
+		# The body ends at the next function, or at the next class-level line.
+		if func_regex.search(raw) != null:
+			break
+		var trimmed := raw.strip_edges()
+		if not trimmed.is_empty() and not trimmed.begins_with("#") and raw == trimmed:
+			break
+		for token in _tokenize(_strip_comments_preserving_strings(raw)):
+			if token == name:
+				count += 1
+	return count
 
 
 # True when the body contains nothing but `pass`. Those are intentional stubs and

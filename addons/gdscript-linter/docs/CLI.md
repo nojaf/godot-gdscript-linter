@@ -241,7 +241,14 @@ button.pressed.connect(self._on_press)  # connected without calling
 [connection signal="pressed" from="Button" to="." method="_on_editor_wired"]
 ```
 
-Comments do **not** count — a function mentioned only in prose is still dead.
+Comments do **not** count — a function mentioned only in prose is still dead. Nor
+does a function naming *itself*: recursing, or returning its own name as a string,
+is not somebody else calling it.
+
+```gdscript
+func unused_snowcat() -> String:
+	return "unused_snowcat"   # still reported -- it is its own only mention
+```
 
 References are searched across the whole project regardless of which paths you are
 analyzing, so narrowing the scan cannot manufacture a false positive.
@@ -261,8 +268,6 @@ delete something live.
 
 - A name shared with anything else in the project — a variable, or a method of the
   same name on another class — counts as a reference, so the function is not
-  reported.
-- A dead function that calls itself recursively references its own name and is not
   reported.
 - A script that fails to compile is skipped entirely, since its native base is
   unknown and every virtual override would otherwise look dead.
