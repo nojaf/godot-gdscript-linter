@@ -133,6 +133,13 @@ errors it makes are misses, not bad advice to delete live code.
 Never reported: engine virtuals, and placeholder bodies containing only `pass`
 (the `empty-function` check covers those).
 
+**Data-driven callers.** Godot calls methods by name from places that contain no
+code: signal connections wired in the editor, and AnimationPlayer method tracks
+firing from a timeline. Those live in `.tscn`/`.tres` while embedded, but become
+binary `.res`/`.scn` once saved out — so binary files are scanned too, by pulling
+identifier-shaped ASCII runs straight out of the bytes. That can only add
+references, so a garbled read makes the check quieter rather than wrong.
+
 **The trap worth remembering:** `ClassDB.class_has_method("Node", "_ready")`
 returns **false**, while `class_get_method_list("Node")` includes `_ready`.
 `class_has_method` filters virtuals out. Using it here would have marked every

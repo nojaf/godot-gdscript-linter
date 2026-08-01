@@ -21,9 +21,18 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_UNUSED_FUNCTION := "unused-function"
 
-## Files searched for references. Scene and resource files matter because the
-## editor wires signals to handlers by name: method="_on_button_pressed".
-const REFERENCE_EXTENSIONS := ["gd", "tscn", "tres"]
+## Text files searched for references. Scene and resource files matter because
+## Godot itself calls methods by name from data rather than from code:
+##   .tscn  [connection ... method="_on_button_pressed"]
+##   .tscn  AnimationPlayer method tracks: "method": &"spawn_wave"
+##   .tres  the same, once an animation is saved outside its scene
+## .cs is here for Mono projects calling into GDScript by name.
+const REFERENCE_TEXT_EXTENSIONS := ["gd", "tscn", "tres", "cs", "json", "cfg"]
+
+## Binary equivalents of the above. Godot stores strings in these as plain UTF-8,
+## so the ASCII runs are readable even though the container is not. Scanning them
+## can only ADD references, so a false read makes the check quieter, never wronger.
+const REFERENCE_BINARY_EXTENSIONS := ["res", "scn"]
 
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
@@ -51,12 +60,19 @@ func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
 
 
 func _index_project() -> void:
-	for path in _collect_project_files("res://"):
+	for path: String in _collect_project_files("res://"):
+		var extension := path.get_extension().to_lower()
+
+		if REFERENCE_BINARY_EXTENSIONS.has(extension):
+			for token in _extract_ascii_identifiers(path):
+				_token_counts[token] = _token_counts.get(token, 0) + 1
+			continue
+
 		var text := _read_text(path)
 		if text.is_empty():
 			continue
 
-		if path.get_extension().to_lower() == "gd":
+		if extension == "gd":
 			# Comments are stripped so a function merely mentioned in prose does
 			# not count as a reference. String literals are KEPT, because
 			# call("foo") and Callable(self, "foo") are real references.
@@ -241,11 +257,44 @@ func _collect_project_files(root: String) -> Array:
 			var full := current.path_join(entry)
 			if dir.current_is_dir():
 				pending.append(full)
-			elif REFERENCE_EXTENSIONS.has(entry.get_extension().to_lower()):
-				found.append(full)
+			else:
+				var extension := entry.get_extension().to_lower()
+				if REFERENCE_TEXT_EXTENSIONS.has(extension) or REFERENCE_BINARY_EXTENSIONS.has(extension):
+					found.append(full)
 			entry = dir.get_next()
 		dir.list_dir_end()
 	return found
+
+
+# Pulls identifier-shaped ASCII runs out of a binary resource. Godot's binary
+# format keeps strings in a plain UTF-8 table, so a method name stored in an
+# animation track survives as readable bytes.
+func _extract_ascii_identifiers(path: String) -> PackedStringArray:
+	var tokens := PackedStringArray()
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return tokens
+
+	var bytes := file.get_buffer(file.get_length())
+	file.close()
+
+	var current := PackedByteArray()
+	for byte in bytes:
+		var is_identifier_char := (
+			(byte >= 65 and byte <= 90) or    # A-Z
+			(byte >= 97 and byte <= 122) or   # a-z
+			(byte >= 48 and byte <= 57) or    # 0-9
+			byte == 95)                       # _
+		if is_identifier_char:
+			current.append(byte)
+		else:
+			if current.size() > 0:
+				tokens.append(current.get_string_from_ascii())
+				current.clear()
+	if current.size() > 0:
+		tokens.append(current.get_string_from_ascii())
+
+	return tokens
 
 
 func _read_text(path: String) -> String:

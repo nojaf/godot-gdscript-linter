@@ -237,9 +237,27 @@ button.pressed.connect(self._on_press)  # connected without calling
 ```
 
 ```ini
-# and in a .tscn / .tres, the editor wiring signals by name:
+# and in scene/resource data, where Godot calls methods by name rather than
+# from any code -- signal connections wired in the editor:
 [connection signal="pressed" from="Button" to="." method="_on_editor_wired"]
+
+# ...and AnimationPlayer method tracks, which fire from the timeline:
+"values": [{ "args": [], "method": &"spawn_wave" }]
 ```
+
+### Which files are searched
+
+| Kind | Extensions |
+|------|------------|
+| Text | `.gd`, `.tscn`, `.tres`, `.cs`, `.json`, `.cfg` |
+| Binary | `.res`, `.scn` |
+
+Binary matters more than it sounds: an animation living inside its scene is text
+and readable, but the moment it is saved out to its own file it becomes a binary
+`.res`, and a method track in it is the function's only caller. Godot stores
+strings in these as plain UTF-8, so the identifier-shaped ASCII runs are extracted
+directly from the bytes. Reading them can only ever *add* references, so a garbled
+read makes the check quieter, never wrong.
 
 Comments do **not** count — a function mentioned only in prose is still dead. Nor
 does a function naming *itself*: recursing, or returning its own name as a string,
