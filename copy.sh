@@ -104,6 +104,9 @@ cat > "$LINT_SCRIPT" <<'LINT_EOF'
 # critical. That is the point of running this before launching the game.
 # NO_MEMBER_CHECK=1 skips it.
 #
+# Also runs with --check-unused-functions, which reports functions nothing in
+# the project references. NO_UNUSED_CHECK=1 skips it.
+#
 # Set GODOT=/path/to/godot to pin a specific binary.
 #
 # Exit codes: 0 = clean, 1 = warnings, 2 = critical issues.
@@ -190,6 +193,15 @@ if [ "${NO_MEMBER_CHECK:-0}" != "1" ]; then
 	case " $* " in
 		*" --check-members "*) ;;
 		*) set -- --check-members "$@" ;;
+	esac
+fi
+
+# Dead-function reporting by default. Not a launch blocker (it is a warning), but
+# it is the kind of rot that only shows up if something looks for it.
+if [ "${NO_UNUSED_CHECK:-0}" != "1" ]; then
+	case " $* " in
+		*" --check-unused-functions "*) ;;
+		*) set -- --check-unused-functions "$@" ;;
 	esac
 fi
 

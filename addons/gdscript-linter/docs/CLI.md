@@ -50,6 +50,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--output, -o <file>` | Output file path (for `--html`) |
 | `--no-ignore` | Bypass all `gdlint:ignore` directives |
 | `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
+| `--check-unused-functions` | Report functions nothing in the project references |
 | `--help, -h` | Show help message |
 
 ## Exit Codes
@@ -210,6 +211,67 @@ Suppress a false positive with the usual directives:
 
 ```gdscript
 self.widget.text = "x"  # gdlint:ignore-line:unknown-member
+```
+
+## Unused Functions (`--check-unused-functions`)
+
+Reports functions that nothing in the project references — the kind of rot that
+accumulates quietly as code moves around.
+
+```bash
+godot --headless --script ... -- --check-unused-functions
+```
+
+Reported as WARNING, since dead code does not stop the game from running.
+
+### What counts as a reference
+
+Deliberately generous. Every occurrence of the name anywhere in the project counts,
+so all of these keep a function alive:
+
+```gdscript
+demo.actually_called()                  # ordinary call
+self.call("called_by_string")           # name inside a string
+Callable(self, "called_by_callable")    # bare Callable reference
+button.pressed.connect(self._on_press)  # connected without calling
+```
+
+```ini
+# and in a .tscn / .tres, the editor wiring signals by name:
+[connection signal="pressed" from="Button" to="." method="_on_editor_wired"]
+```
+
+Comments do **not** count — a function mentioned only in prose is still dead.
+
+References are searched across the whole project regardless of which paths you are
+analyzing, so narrowing the scan cannot manufacture a false positive.
+
+### What is never reported
+
+- **Engine virtuals.** `_ready`, `_process`, `_input` and friends are called by the
+  engine, never by your code. They are identified by asking `ClassDB` what the
+  native base class declares.
+- **Placeholder bodies.** A function containing only `pass` is an intentional stub;
+  the `empty-function` check already covers those.
+
+### Limitations
+
+The check errs toward silence: it would rather miss dead code than tell you to
+delete something live.
+
+- A name shared with anything else in the project — a variable, or a method of the
+  same name on another class — counts as a reference, so the function is not
+  reported.
+- A dead function that calls itself recursively references its own name and is not
+  reported.
+- A script that fails to compile is skipped entirely, since its native base is
+  unknown and every virtual override would otherwise look dead.
+
+Suppress a finding with the usual directives:
+
+```gdscript
+# gdlint:ignore-next-line:unused-function
+func kept_for_later() -> void:
 ```
 
 ## Output Formats
@@ -389,6 +451,7 @@ For use with `--check`:
 | `unused-parameter` | Function parameters never used |
 | `script-load-failed` | Script does not compile (`--check-members` only) |
 | `unknown-member` | A name in a `self.foo.bar` chain resolves to nothing (`--check-members` only) |
+| `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
 
 ## Common Mistakes
 
