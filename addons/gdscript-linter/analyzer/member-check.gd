@@ -149,9 +149,12 @@ func _check_file(path: String, script: Script) -> Array:
 	var chain_regex := RegEx.new()
 	chain_regex.compile("\\bself((?:\\.[A-Za-z_][A-Za-z0-9_]*)+)")
 
-	# A bare `some_signal.emit(` -- not preceded by a dot or another identifier.
-	var bare_emit_regex := RegEx.new()
-	bare_emit_regex.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)\\.emit\\s*\\(")
+	# A chain written without the `self.` prefix: `critters.any_enemy_walking`.
+	# Only followed up when the root identifier is a member of this script and is
+	# not shadowed anywhere by a local, parameter or loop variable.
+	var bare_chain_regex := RegEx.new()
+	bare_chain_regex.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)((?:\\.[A-Za-z_][A-Za-z0-9_]*)+)")
+	var shadowed_by_line := _collect_shadowed_names(lines)
 
 	# `if predicate:` -- a lone identifier in a truth test, not called, not dotted.
 	var bare_condition_regex := RegEx.new()
@@ -207,20 +210,25 @@ func _check_file(path: String, script: Script) -> Array:
 				"'%s' is a method used as a condition without being called; " % candidate
 				+ "the reference is always true (did you mean '%s()'?)" % candidate))
 
-		# Signals are just as often emitted without the `self.` prefix, and Godot
-		# misses that form too. The lookbehind keeps this from re-matching the
-		# tail of a chain already handled above.
-		for found in bare_emit_regex.search_all(code):
-			var signal_name := found.get_string(1)
-			if not root.signals.has(signal_name):
+		# The same chains written without `self.`. Everything the qualified form
+		# catches applies here too; the only extra work is proving the root
+		# identifier really is this script's member and not a shadowing local.
+		for found in bare_chain_regex.search_all(code):
+			var head := found.get_string(1)
+			if head == "self" or shadowed_by_line[i].has(head) or not root.names.has(head):
 				continue
-			var paren := _next_non_space(code, found.get_end() - 1)
-			if paren == -1 or code[paren] != "(":
-				continue
-			var given := _count_call_arguments(lines, i, paren)
-			if given < 0:
-				continue
-			var issue = _check_signal_arity(path, i + 1, signal_name, given, root.signals[signal_name])
+			var segments := PackedStringArray([head])
+			segments.append_array(found.get_string(2).substr(1).split("."))
+
+			var is_call := false
+			var argument_count := -1
+			var paren := _next_non_space(code, found.get_end())
+			if paren != -1 and code[paren] == "(":
+				is_call = true
+				argument_count = _count_call_arguments(lines, i, paren)
+			var in_condition := _is_condition_context(code, found.get_start())
+			var issue = _check_chain(path, i + 1, segments, root, root_label,
+				argument_count, is_call, in_condition)
 			if issue != null:
 				issues.append(issue)
 
@@ -291,6 +299,63 @@ func _check_signal_arity(path: String, line_num: int, signal_name: String, given
 	return IssueClass.create(
 		path, line_num, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
 		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected])
+
+
+# For each line, the names bound by a local, parameter or loop variable in the
+# function that line belongs to. A bare chain rooted in one of those is skipped:
+# the script member of the same name may not be what the line refers to.
+#
+# Scoped per function rather than per file on purpose. A file-wide set means one
+# `var result` in any function switches the check off for `result` everywhere,
+# which fails silently and gets worse the more common the name is.
+func _collect_shadowed_names(lines: Array) -> Array:
+	var func_start := RegEx.new()
+	func_start.compile("^\\s*(?:static\\s+)?func\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\((.*)\\)")
+	var local_var := RegEx.new()
+	local_var.compile("^[\\t ]+var\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	var loop_var := RegEx.new()
+	loop_var.compile("^\\s*for\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	var param_name := RegEx.new()
+	param_name.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)")
+
+	# Pass 1: which function each line belongs to, and where each one starts.
+	var owner := []
+	var starts := []
+	var current := -1
+	for i in range(lines.size()):
+		if func_start.search(String(lines[i])) != null:
+			current = starts.size()
+			starts.append(i)
+		owner.append(current)
+
+	# Pass 2: gather each function's bound names, applied to the whole function so
+	# a local declared halfway down still covers the lines above it.
+	var scopes := []
+	for _i in range(starts.size()):
+		scopes.append({})
+	for i in range(lines.size()):
+		if owner[i] == -1:
+			continue
+		var scope: Dictionary = scopes[owner[i]]
+		var text := String(lines[i])
+
+		var found := func_start.search(text)
+		if found != null:
+			for part in found.get_string(1).split(","):
+				var name_match := param_name.search(part)
+				if name_match != null:
+					scope[name_match.get_string(1)] = true
+		found = local_var.search(text)
+		if found != null:
+			scope[found.get_string(1)] = true
+		found = loop_var.search(text)
+		if found != null:
+			scope[found.get_string(1)] = true
+
+	var by_line := []
+	for i in range(lines.size()):
+		by_line.append(scopes[owner[i]] if owner[i] != -1 else {})
+	return by_line
 
 
 # True when what precedes the match makes it a truth test: if/elif/while, a

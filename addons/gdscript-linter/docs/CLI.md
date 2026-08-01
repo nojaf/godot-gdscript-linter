@@ -210,9 +210,31 @@ var cb := self.predicate                 # fine
 button.pressed.connect(self._on_press)   # fine
 ```
 
-Only a lone identifier (`if predicate:`) is checked in the unqualified form; a
-dotted receiver without `self.` (`if critters.any_enemy_walking:`) has nothing to
-resolve the receiver against and is skipped.
+Both `self.critters.any_enemy_walking` and the unqualified
+`critters.any_enemy_walking` are checked — see below.
+
+### Qualified and unqualified access
+
+Every check here works with or without the `self.` prefix. For an unqualified
+chain, the root identifier is resolved as a member of the enclosing script:
+
+```gdscript
+self.critters.any_enemy_walking   # checked
+critters.any_enemy_walking        # also checked
+```
+
+A chain is skipped when its root name is bound by a local variable, parameter or
+loop variable in the same function, because the script member of that name may not
+be what the line refers to:
+
+```gdscript
+var target := "a string now"   # shadows the member `target`
+print(target.length())         # not checked against the member's type
+```
+
+That guard is scoped per function, not per file. A file-wide set would mean one
+`var result` in any function silently switching the check off for `result`
+everywhere — the kind of failure that gets worse the more ordinary the name is.
 
 ### How it resolves
 
