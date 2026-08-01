@@ -15,7 +15,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --json
 
 # Output as SARIF 2.1.0 (for GitHub code scanning / JetBrains)
-godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif > results.sarif
+godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif -o results.sarif
 ```
 
 ## Usage
@@ -43,11 +43,11 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--top <N>` | Show only top N issues sorted by priority |
 | `--spaces <N>` | Indent width for `json`/`sarif` output (`0` = compact single line; default: tab) |
 | `--json` | Shorthand for `--format json` |
-| `--sarif` | Shorthand for `--format sarif` (SARIF 2.1.0, printed to stdout) |
+| `--sarif` | Shorthand for `--format sarif` (SARIF 2.1.0) |
 | `--clickable` | Shorthand for `--format clickable` (Godot Output panel format) |
 | `--html` | Shorthand for `--format html` |
 | `--github` | Shorthand for `--format github` (GitHub Actions annotations) |
-| `--output, -o <file>` | Output file path (for `--html`) |
+| `--output, -o <file>` | Write output to a file instead of stdout (`--sarif`/`--json`/`--html`) |
 | `--no-ignore` | Bypass all `gdlint:ignore` directives |
 | `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
 | `--check-unused-functions` | Report functions nothing in the project references |
@@ -333,16 +333,22 @@ Human-readable report with summary, top files, and categorized issues.
 Machine-parseable output for integration with other tools:
 
 ```bash
-godot --headless --script ... -- --json > report.json
+godot --headless --script ... -- --json -o report.json
 ```
 
 ### SARIF
 
-Standard [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) output, printed to stdout. Integrates with GitHub code scanning, JetBrains IDEs, and other SARIF-aware tools:
+Standard [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) output. Integrates with GitHub code scanning, JetBrains IDEs, and other SARIF-aware tools:
 
 ```bash
-godot --headless --script ... -- --sarif > results.sarif
+godot --headless --script ... -- --sarif -o results.sarif
 ```
+
+**Use `-o`, not a shell redirect.** Godot prints its version banner to *stdout*
+before this script runs, so `--sarif > results.sarif` captures the banner too and
+the file is not valid JSON. `--quiet` does not help — it silences the report along
+with the banner. `-o` writes the payload straight to the file and never touches
+stdout. The same applies to `--json`.
 
 File paths are emitted repo-relative (the `res://` prefix is stripped) so alerts resolve against the repository. Severities map as CRITICAL→`error`, WARNING→`warning`, INFO→`note`.
 
@@ -406,7 +412,7 @@ jobs:
 ```yaml
 	  - name: Run GDScript Linter (SARIF)
 		run: |
-		  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif > results.sarif
+		  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --sarif -o results.sarif
 		continue-on-error: true  # let the upload step run even when issues are found
 
 	  - name: Upload SARIF
@@ -421,7 +427,7 @@ jobs:
 lint:
   image: barichello/godot-ci:4.2.1
   script:
-	- godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --format json > lint-report.json
+	- godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- --format json -o lint-report.json
   artifacts:
 	reports:
 	  codequality: lint-report.json

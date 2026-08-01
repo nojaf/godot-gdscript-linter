@@ -143,7 +143,7 @@ func _print_help() -> void:
 	print("  --clickable       Shorthand for --format clickable (Godot Output panel format)")
 	print("  --html            Shorthand for --format html (generates HTML report)")
 	print("  --github          Shorthand for --format github (GitHub Actions annotations)")
-	print("  --output, -o <f>  Output file path (for --html, default: code_quality_report.html)")
+	print("  --output, -o <f>  Write output to a file instead of stdout (--sarif/--json/--html)")
 	print("  --no-ignore       Bypass all gdlint:ignore directives (show everything)")
 	print("  --check-members   Also load every script: report ones that fail to compile")
 	print("                    and self.foo.bar accesses that resolve to nothing")
@@ -375,7 +375,24 @@ func _extract_issue_value(issue) -> int:
 
 # gdlint:ignore-function:print-statement - CLI JSON output
 func _output_json(result) -> void:
-	print(JSON.stringify(result.to_dict(), _json_indent))
+	_write_or_print(JSON.stringify(result.to_dict(), _json_indent), "JSON report")
+
+
+# Godot prints its version banner to stdout before this script ever runs, so a
+# redirect like `--sarif > results.sarif` captures the banner too and the file is
+# not valid JSON. Writing the payload to --output sidesteps stdout entirely.
+func _write_or_print(payload: String, label: String) -> void:
+	if _output_file.is_empty():
+		print(payload)
+		return
+
+	var file := FileAccess.open(_output_file, FileAccess.WRITE)
+	if file == null:
+		push_error("Failed to write %s to: %s" % [label, _output_file])
+		return
+	file.store_string(payload)
+	file.close()
+	print("%s written to: %s" % [label, _output_file])
 
 # gdlint:ignore-function:print-statement - CLI SARIF 2.1.0 output
 func _output_sarif(result) -> void:
@@ -396,7 +413,7 @@ func _output_sarif(result) -> void:
 			"results": _sarif_results(result),
 		}],
 	}
-	print(JSON.stringify(sarif, _json_indent))
+	_write_or_print(JSON.stringify(sarif, _json_indent), "SARIF report")
 
 # Distinct rule ids seen in this run, as minimal reportingDescriptor entries.
 func _sarif_rules(result) -> Array:

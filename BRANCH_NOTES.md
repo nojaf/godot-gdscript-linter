@@ -8,20 +8,26 @@ Branch point: `aeeae7d` (tip of `main`).
 
 ## What is here
 
-| Commit | Change | Upstreamable? |
-|--------|--------|---------------|
-| `9b0d139` | SARIF 2.1.0 output (`--sarif`), `--spaces <N>`, `scripts/validate_sarif.py` | Yes |
-| `9b672f3` | `copy.sh` generates a `lint.sh` wrapper in the target project | No — local workflow |
-| `021d408` | `--check-members`: verify `self.foo.bar` chains resolve | Yes |
-| `0afb2e9` | `--check-unused-functions`: report functions nothing references | Yes |
+| Change | Commits | Upstreamable? |
+|--------|---------|---------------|
+| SARIF 2.1.0 output (`--sarif`), `--spaces <N>`, `scripts/validate_sarif.py` | `9b0d139` | Yes |
+| `copy.sh` generates a `lint.sh` wrapper in the target project | `9b672f3` | No — local workflow |
+| `--check-members`: verify `self.foo.bar` chains and signal emit arity | `021d408`, `c5ecf83` | Yes |
+| `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b` | Yes |
+| `--output` for `--sarif`/`--json` | see below | Yes |
 
-The two feature commits are additive and off by default (`--sarif` and
-`--check-members` are opt-in flags), so they change nothing for existing users.
-`copy.sh` is purely local tooling and has no reason to go upstream.
+Every feature is additive and behind an opt-in flag, so nothing changes for
+existing users. `copy.sh` is purely local tooling and has no reason to go upstream.
+
+**A theme worth stating once.** Several of these exist because Godot's own checking
+is stricter than expected in some places and blind in others, and the only reliable
+way to tell which was to test each case against the engine rather than reason about
+it. Where the parser already covers something, these checks deliberately do not
+duplicate it.
 
 ---
 
-## `9b0d139` — SARIF output
+## SARIF output — `9b0d139`
 
 `--sarif` / `--format sarif` emits SARIF 2.1.0 for GitHub code scanning and
 JetBrains. Paths are repo-relative (`res://` stripped); severities map
@@ -32,15 +38,21 @@ CRITICAL→`error`, WARNING→`warning`, INFO→`note`. Exit codes unchanged.
 `scripts/validate_sarif.py` is a stdlib-only structural and parity validator used
 as the gate for the format.
 
-**Known bug, unfixed:** the output is not valid JSON. Godot writes its version
-banner to *stdout*, so the documented `--sarif > results.sarif` produces a file
-starting with `Godot Engine v4.7.1...`. Reproduces without any other flag, so it
-shipped with the feature. `--quiet` is not a fix — it silences the report too.
-Needs either an `--output` path for SARIF or banner stripping in the caller.
+### The stdout bug, and its fix
+
+Originally shipped broken: the output was not valid JSON. Godot prints its version
+banner to *stdout* before the script runs, so the documented
+`--sarif > results.sarif` produced a file starting with `Godot Engine v4.7.1...`.
+`--quiet` is not a fix — it silences the report along with the banner.
+
+Fixed by making `--output/-o` work for `sarif` and `json` (it previously only
+applied to `--html`), writing the payload straight to the file and never touching
+stdout. The docs and CI examples now use `-o results.sarif` rather than a redirect.
+Verified with `scripts/validate_sarif.py`, including result parity against `--json`.
 
 ---
 
-## `9b672f3` — `copy.sh` generates `lint.sh`
+## `copy.sh` generates `lint.sh` — `9b672f3`
 
 Local workflow only. This project is developed with an external editor, so the
 editor dock is not used and everything runs from the CLI.
@@ -69,27 +81,30 @@ those lenses gets a summary count and nothing actionable. `lint.sh` therefore
 defaults to `--clickable`, which lists everything; pass any explicit format
 (including `--format console`) to override.
 
-Also defaults to `--check-members` (see below). `NO_MEMBER_CHECK=1` skips it,
+Both project-level checks are on by default, since the script exists to be run
+before launching the game. `NO_MEMBER_CHECK=1` and `NO_UNUSED_CHECK=1` skip them,
 `NO_LINT_SCRIPT=1` skips generating the wrapper, and a hand-written `lint.sh` is
 never overwritten — only files carrying the `generated-by:` marker are.
 
 ---
 
-## `021d408` — `--check-members`
+## `--check-members` — `021d408`, `c5ecf83`
 
 A "will this actually run?" pass, intended right before launching the game.
-Reports `script-load-failed` and `unknown-member`, both CRITICAL.
+Reports `script-load-failed`, `unknown-member` and `wrong-argument-count`, all
+CRITICAL.
 
 The motivating bug: `self.clock_label` where the member is `clock`. It compiles
 clean and crashes on the first frame `_process` runs.
 
-**Why the linter has to do this.** GDScript verifies neither case at parse time:
+**Why the linter has to do this.** GDScript verifies none of these at parse time:
 
 ```gdscript
-clock_labl.text = "x"       # Parse Error — caught
-self.clock_labl.text = "x"  # clean — property access through self is runtime
-self.clock.ziggy = "x"      # clean — property access on typed object vars
-                            #         is not verified either
+clock_labl.text = "x"        # Parse Error — caught
+self.clock_labl.text = "x"   # clean — property access through self is runtime
+self.clock.ziggy = "x"       # clean — property access on typed object vars
+                             #         is not verified either
+self.stopped_walking.emit()  # clean — signal emit arity is not verified
 ```
 
 Only the first is caught. A codebase that writes `self.` on member access is opted
@@ -108,27 +123,32 @@ global class list — and stop as soon as a type cannot be determined.
 missing a cast or wider than what it holds; both fixes keep the check working on
 the narrower type.
 
+**Method call arity is deliberately not checked**, and this was measured rather
+than assumed. Godot's parser rejects `self.foo(1)`, bare `foo(1)` and
+`self.typed_member.foo(1)` alike with "Too few arguments", which surfaces here as
+`script-load-failed`. Only signal emits slip through — in both the `self.` and
+unqualified forms — so only signal emits are checked. Signals have no default
+arguments, so the expected count is exact. The one case neither catches is a call
+through an untyped variable, which nothing can resolve.
+
 **Limitations:** scripts overriding `_get_property_list`/`_set`/`_get` are skipped
 entirely; loading runs `@tool` static initializers; a broken base script reports
 only the root cause with a dependent count; a stale class cache makes everything
 fail to load.
 
-See `addons/gdscript-linter/docs/CLI.md` for the user-facing documentation.
-
 ---
 
-## `0afb2e9` — `--check-unused-functions`
+## `--check-unused-functions` — `0afb2e9`, `3a29a41`, `956129b`
 
 Reports functions nothing in the project references, as a WARNING. Dead code does
 not stop the game running, so it does not gate launching.
 
 **Conservative by design.** Every occurrence of the name anywhere counts as a
-reference — calls, bare `Callable` references, names inside strings
-(`call("foo")`), and `method="..."` wiring in `.tscn`/`.tres`, which is how the
-editor connects signals. Comments are stripped first, so a function mentioned only
-in prose is still dead. References are searched project-wide regardless of the
-analyzed paths, so narrowing the scan cannot manufacture a false positive. The
-errors it makes are misses, not bad advice to delete live code.
+reference — calls, bare `Callable` references, and names inside strings
+(`call("foo")`). Comments are stripped first, so a function mentioned only in prose
+is still dead. References are searched project-wide regardless of the analyzed
+paths, so narrowing the scan cannot manufacture a false positive. The errors it
+makes are misses, not bad advice to delete live code.
 
 Never reported: engine virtuals, and placeholder bodies containing only `pass`
 (the `empty-function` check covers those).
@@ -139,6 +159,18 @@ firing from a timeline. Those live in `.tscn`/`.tres` while embedded, but become
 binary `.res`/`.scn` once saved out — so binary files are scanned too, by pulling
 identifier-shaped ASCII runs straight out of the bytes. That can only add
 references, so a garbled read makes the check quieter rather than wrong.
+
+**Self-references do not count** (`3a29a41`). Because names inside strings count,
+a function returning its own name counted as its own caller and could never be
+reported:
+
+```gdscript
+func unused_snowcat() -> String:
+	return "unused_snowcat"
+```
+
+Mentions within a function's own body are now discounted, which also means a
+function whose only caller is itself is correctly reported.
 
 **The trap worth remembering:** `ClassDB.class_has_method("Node", "_ready")`
 returns **false**, while `class_get_method_list("Node")` includes `_ready`.
@@ -152,6 +184,17 @@ whole repo. None in a real game project, no false positives in either.
 
 ---
 
-## Untracked local files
+## Testing
 
-`local-docs/` is gitignored and holds working plans (e.g. `sarif-plan.md`).
+There is no test suite in this repo. These checks were verified against fixture
+projects covering each way a construct can legitimately appear — inheritance
+chains, native and script-class types, string-based and editor-wired references,
+binary resources, multi-line argument lists, and the ignore directives — plus
+dogfooding on the addon itself and on a real game project.
+
+Keeping known-bad cases in the fixtures matters more than it sounds. Two separate
+mistakes during this work produced *no findings at all* while still exiting
+normally: a stale class cache, and a type-inference error in a new checker. Both
+looked exactly like a clean run.
+
+See `addons/gdscript-linter/docs/CLI.md` for the user-facing documentation.
