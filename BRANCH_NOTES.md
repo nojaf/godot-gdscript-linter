@@ -14,6 +14,7 @@ Branch point: `aeeae7d` (tip of `main`).
 | `copy.sh` generates a `lint.sh` wrapper in the target project | `9b672f3` | No — local workflow |
 | `--check-members`: verify `self.foo.bar` chains and signal emit arity | `021d408`, `c5ecf83` | Yes |
 | `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b` | Yes |
+| `--check-exports`: object `@export` vars with no null guard | `00460c0`, see below | Yes |
 | `--output` for `--sarif`/`--json` | see below | Yes |
 
 Every feature is additive and behind an opt-in flag, so nothing changes for
@@ -81,10 +82,11 @@ those lenses gets a summary count and nothing actionable. `lint.sh` therefore
 defaults to `--clickable`, which lists everything; pass any explicit format
 (including `--format console`) to override.
 
-Both project-level checks are on by default, since the script exists to be run
-before launching the game. `NO_MEMBER_CHECK=1` and `NO_UNUSED_CHECK=1` skip them,
-`NO_LINT_SCRIPT=1` skips generating the wrapper, and a hand-written `lint.sh` is
-never overwritten — only files carrying the `generated-by:` marker are.
+All three project-level checks are on by default, since the script exists to be
+run before launching the game. `NO_MEMBER_CHECK=1`, `NO_UNUSED_CHECK=1` and
+`NO_EXPORT_CHECK=1` skip them individually, `NO_LINT_SCRIPT=1` skips generating the
+wrapper, and a hand-written `lint.sh` is never overwritten — only files carrying
+the `generated-by:` marker are.
 
 ---
 
@@ -181,6 +183,35 @@ Found four genuine dead functions in the addon itself — `get_location_string`,
 `get_severity_icon` (`issue.gd`), `get_issues_for_file` (`analysis-result.gd`),
 `_add_code_block` (`help-card-builder.gd`) — each appearing exactly once in the
 whole repo. None in a real game project, no false positives in either.
+
+---
+
+## `--check-exports` — `00460c0`
+
+An `@export` holding an object reference is null until something wires it in the
+editor. The failure lands at runtime, far from the declaration. CRITICAL.
+
+Satisfied either by null-guarding the reference or by declaring it optional with
+`= null`, so optionality is written down rather than inferred. Only object-typed
+exports count — the engine's property list separates exported from plain members
+and object types from built-ins, so `@export_range`, setters and every other
+annotation form need no parsing, and `@export var hp: int` is 0, never null.
+
+**Where the guard must live depends on the base class.** A Node's exports are
+populated as it enters the tree, so the guard has to be in `_ready` or
+`_enter_tree`; a guard in a helper nobody calls protects nothing. A `Resource` has
+neither callback, so anywhere in the script counts.
+
+**Guard detection matches the TEST, not the mention.** An earlier cut counted every
+identifier in any `if` line, so `if self.critters.any_enemy_walking:` silently
+excused `critters` forever. Recognized forms: `x != null`, `null != x`,
+`assert(x, ...)`, `if x:`, `if not x:`, `is_instance_valid(x)`.
+
+**Found by mutation testing, and worth repeating.** The fixtures missed that bug —
+they only contained well-behaved guards. What caught it was copying a real project,
+deleting two real asserts, and noticing only one of the two expected findings
+appeared. For engine-backed checks, "reports nothing" and "is broken" look
+identical, so both directions have to be proven.
 
 ---
 

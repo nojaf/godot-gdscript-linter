@@ -51,6 +51,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--no-ignore` | Bypass all `gdlint:ignore` directives |
 | `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
 | `--check-unused-functions` | Report functions nothing in the project references |
+| `--check-exports` | Report object-typed `@export` vars that nothing null-guards |
 | `--help, -h` | Show help message |
 
 ## Exit Codes
@@ -372,6 +373,95 @@ Suppress a finding with the usual directives:
 func kept_for_later() -> void:
 ```
 
+## Unguarded Exports (`--check-exports`)
+
+An `@export` holding an object reference is null until something wires it in the
+editor, and nothing guarantees that happened. The failure surfaces at runtime, far
+from the declaration:
+
+```gdscript
+@export var critters: Critters              # never wired
+
+func _ready() -> void:
+	self.critters.critter_tapped.connect(...)   # null
+```
+
+Reported as CRITICAL. Two ways to satisfy it, both explicit:
+
+```gdscript
+@export var critters: Critters
+func _ready() -> void:
+	assert(critters != null, "wire it on the Match scene")
+
+@export var icon: Texture2D = null    # or: declare it optional
+```
+
+### What is checked
+
+Only **object-typed** exports. Built-ins are never null — `@export var hp: int` is
+`0`, not null — so `int`, `float`, `Color`, `Rect2`, typed arrays and the rest are
+never reported. Exports are read from the engine's property list rather than
+parsed, so `@export_range`, exports with setters, and every other annotation form
+are recognized without special cases.
+
+### Where the guard has to be
+
+Depends on the base class, because that decides where the exports are actually
+populated:
+
+| Script extends | Guard must be in |
+|----------------|------------------|
+| `Node` (any descendant) | `_ready()` or `_enter_tree()` |
+| anything else (`Resource`, `RefCounted`, …) | anywhere in the script |
+
+A Node's exports are set as it enters the tree, so those two callbacks are the
+places that run with them populated. A guard parked in a helper nobody calls
+satisfies nothing:
+
+```gdscript
+extends Node
+
+@export var critters: Critters
+
+func _ready() -> void:
+	self._validate()
+
+func _validate() -> void:
+	assert(critters != null, "...")   # still reported -- not a lifecycle callback
+```
+
+A `Resource` has neither callback, so any location counts for one.
+
+### What counts as a guard
+
+Anything that null-tests the name, within the scope above:
+
+```gdscript
+assert(x != null, "...")     # or the compound form, one term per line
+assert(x, "...")
+if x == null: return
+if not x: return
+if x: ...
+if is_instance_valid(x): ...
+```
+
+The test has to be *about the reference*. A condition that merely mentions it —
+`if self.critters.any_enemy_walking:` — is not a guard, and does not excuse it.
+
+### Limitations
+
+- Only guards in the same script count. If a parent or factory guarantees the
+  wiring, the export is still reported; an assert is cheap, but this does push a
+  particular style.
+- For a Node, a guard in a lifecycle callback counts even if some path skips it.
+  The check sees where the test is written, not that it ran.
+- `= null` becomes load-bearing: it is the only way to say "optional".
+
+```gdscript
+# gdlint:ignore-next-line:unguarded-export
+@export var wired_by_the_parent: Node
+```
+
 ## Output Formats
 
 ### Console (default)
@@ -558,6 +648,7 @@ For use with `--check`:
 | `wrong-argument-count` | Signal emitted with the wrong argument count (`--check-members` only) |
 | `method-not-called` | Method used as a condition without being called (`--check-members` only) |
 | `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
+| `unguarded-export` | Object-typed `@export` with no null guard (`--check-exports` only) |
 
 ## Common Mistakes
 

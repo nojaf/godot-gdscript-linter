@@ -107,6 +107,9 @@ cat > "$LINT_SCRIPT" <<'LINT_EOF'
 # Also runs with --check-unused-functions, which reports functions nothing in
 # the project references. NO_UNUSED_CHECK=1 skips it.
 #
+# And with --check-exports, which reports object-typed @export vars that nothing
+# null-guards. NO_EXPORT_CHECK=1 skips it.
+#
 # Set GODOT=/path/to/godot to pin a specific binary.
 #
 # Exit codes: 0 = clean, 1 = warnings, 2 = critical issues.
@@ -202,6 +205,15 @@ if [ "${NO_UNUSED_CHECK:-0}" != "1" ]; then
 	case " $* " in
 		*" --check-unused-functions "*) ;;
 		*) set -- --check-unused-functions "$@" ;;
+	esac
+fi
+
+# Unguarded @export references by default -- an export nobody wired is null, and
+# that only shows up once the scene runs.
+if [ "${NO_EXPORT_CHECK:-0}" != "1" ]; then
+	case " $* " in
+		*" --check-exports "*) ;;
+		*) set -- --check-exports "$@" ;;
 	esac
 fi
 

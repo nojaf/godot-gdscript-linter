@@ -12,6 +12,7 @@ extends SceneTree
 ##   --no-ignore        Bypass all gdlint:ignore directives
 ##   --check-members    Load every script; report compile failures and self.foo.bar that resolves to nothing
 ##   --check-unused-functions  Report functions nothing in the project references
+##   --check-exports    Report object-typed @export vars that nothing null-guards
 
 const AnalysisConfigClass = preload("res://addons/gdscript-linter/analyzer/analysis-config.gd")
 const CodeAnalyzerClass = preload("res://addons/gdscript-linter/analyzer/code-analyzer.gd")
@@ -26,6 +27,7 @@ var _output_file: String = ""  # For HTML output
 var _no_ignore: bool = false  # Bypass all gdlint:ignore directives
 var _check_members: bool = false  # Also load every script and verify self.foo.bar chains
 var _check_unused_functions: bool = false  # Also report functions nothing references
+var _check_exports: bool = false  # Also report @export object vars with no null guard
 var _config_path: String = ""  # Custom config file path
 var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
 var _check_filter: Array[String] = []  # Specific checks to run
@@ -105,6 +107,8 @@ func _parse_arguments() -> void:
 					_check_members = true
 				"--check-unused-functions":
 					_check_unused_functions = true
+				"--check-exports":
+					_check_exports = true
 				"--help", "-h":
 					_print_help()
 					quit(0)
@@ -149,6 +153,7 @@ func _print_help() -> void:
 	print("                    and self.foo.bar accesses that resolve to nothing")
 	print("  --check-unused-functions")
 	print("                    Report functions nothing in the project references")
+	print("  --check-exports   Report object-typed @export vars that nothing null-guards")
 	print("  --path <dir>      Legacy: analyze single path (use positional args instead)")
 	print("  --help, -h        Show this help message")
 	print("")
@@ -202,6 +207,9 @@ func _run_analysis() -> void:
 	if _check_unused_functions:
 		_run_unused_function_check(merged_result, config)
 
+	if _check_exports:
+		_run_export_check(merged_result, config)
+
 	# Apply severity filter if specified
 	if not _severity_filter.is_empty():
 		_apply_severity_filter(merged_result)
@@ -248,6 +256,16 @@ func _run_unused_function_check(result, config) -> void:
 
 	var unused_check := GDLintUnusedFunctionCheck.new()
 	for issue in unused_check.run(paths, config.respect_ignore_directives):
+		result.add_issue(issue)
+
+
+func _run_export_check(result, config) -> void:
+	var paths: Array = []
+	for file_result in result.file_results:
+		paths.append(file_result.file_path)
+
+	var export_check := GDLintExportCheck.new()
+	for issue in export_check.run(paths, config.respect_ignore_directives):
 		result.add_issue(issue)
 
 
