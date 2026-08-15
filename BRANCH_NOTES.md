@@ -14,7 +14,7 @@ Branch point: `aeeae7d` (tip of `main`).
 | `copy.sh` generates a `lint.sh` wrapper in the target project | `9b672f3` | No — local workflow |
 | `--check-members`: verify `self.foo.bar` chains and signal emit arity | `021d408`, `c5ecf83` | Yes |
 | `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b` | Yes |
-| `--check-exports`: object `@export` vars with no null guard | `00460c0`, see below | Yes |
+| `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Yes |
 | `--output` for `--sarif`/`--json` | see below | Yes |
 
 Every feature is additive and behind an opt-in flag, so nothing changes for
@@ -186,7 +186,7 @@ whole repo. None in a real game project, no false positives in either.
 
 ---
 
-## `--check-exports` — `00460c0`
+## `--check-exports` — `83fc79d`
 
 An `@export` holding an object reference is null until something wires it in the
 editor. The failure lands at runtime, far from the declaration. CRITICAL.
