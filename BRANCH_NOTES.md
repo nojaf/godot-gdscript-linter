@@ -174,6 +174,14 @@ func unused_snowcat() -> String:
 Mentions within a function's own body are now discounted, which also means a
 function whose only caller is itself is correctly reported.
 
+**`addons/` is excluded from the reference index** unless an addon is what is being
+analyzed. Addon text counts as references otherwise, and the linter's own installed
+copy contains ~80 standalone `all` tokens — enough to hide a genuinely dead `all()`
+in the project under analysis. The first cut of this matched `res://addons/`, but
+analyzed paths arrive without the prefix when the target is given as a relative
+argument, so the addon excluded *itself* when dogfooding and reported 377 of its own
+functions as dead. Both path forms are normalized now.
+
 **The trap worth remembering:** `ClassDB.class_has_method("Node", "_ready")`
 returns **false**, while `class_get_method_list("Node")` includes `_ready`.
 `class_has_method` filters virtuals out. Using it here would have marked every

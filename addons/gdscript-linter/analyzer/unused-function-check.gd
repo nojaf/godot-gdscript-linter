@@ -51,7 +51,18 @@ func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	_token_counts.clear()
 	_declaration_counts.clear()
 
-	_index_project()
+	# addons/ is third-party code and is excluded from analysis by default. Its
+	# text must not count as references either: the linter's own installed copy
+	# contains ~80 standalone `all` tokens, which was enough to hide a real dead
+	# `all()` in the project being analyzed. Only index it when it is what is
+	# being analyzed (dogfooding the addon itself).
+	var include_addons := false
+	for path: String in file_paths:
+		if _is_addon_path(path):
+			include_addons = true
+			break
+
+	_index_project(include_addons)
 
 	var issues: Array = []
 	for path in file_paths:
@@ -59,8 +70,19 @@ func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	return issues
 
 
-func _index_project() -> void:
+# Analyzed paths arrive with or without the res:// prefix depending on how the
+# target was given on the command line, so both forms have to be recognized.
+func _is_addon_path(path: String) -> bool:
+	var normalized := path.replace("\\", "/")
+	if normalized.begins_with("res://"):
+		normalized = normalized.substr(6)
+	return normalized.begins_with("addons/")
+
+
+func _index_project(include_addons: bool) -> void:
 	for path: String in _collect_project_files("res://"):
+		if not include_addons and _is_addon_path(path):
+			continue
 		var extension := path.get_extension().to_lower()
 
 		if REFERENCE_BINARY_EXTENSIONS.has(extension):

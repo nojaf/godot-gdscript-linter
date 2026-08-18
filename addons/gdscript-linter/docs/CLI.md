@@ -347,6 +347,11 @@ func unused_snowcat() -> String:
 References are searched across the whole project regardless of which paths you are
 analyzing, so narrowing the scan cannot manufacture a false positive.
 
+`addons/` is excluded from that search unless an addon is itself what you are
+analyzing. Addon code is third-party prose and identifiers, and it masks dead code
+in your project: this linter's own installed copy contains ~80 standalone `all`
+tokens, which was enough to hide a genuinely dead `all()` function.
+
 ### What is never reported
 
 - **Engine virtuals.** `_ready`, `_process`, `_input` and friends are called by the
@@ -360,9 +365,10 @@ analyzing, so narrowing the scan cannot manufacture a false positive.
 The check errs toward silence: it would rather miss dead code than tell you to
 delete something live.
 
-- A name shared with anything else in the project — a variable, or a method of the
-  same name on another class — counts as a reference, so the function is not
-  reported.
+- A name shared with anything else in the project — a variable, a method of the
+  same name on another class, or an ordinary English word inside a string —
+  counts as a reference, so the function is not reported. Short common names
+  (`all`, `start`, `update`) are the most likely to be missed this way.
 - A script that fails to compile is skipped entirely, since its native base is
   unknown and every virtual override would otherwise look dead.
 
