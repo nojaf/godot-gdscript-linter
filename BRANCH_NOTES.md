@@ -17,18 +17,19 @@ Claude (Anthropic's coding agent) wrote all of the code on this branch, the
 fixture projects, the documentation, and this file. Every commit carries a
 `Co-Authored-By: Claude` trailer.
 
-My role was product owner, not implementer. I said what I wanted, supplied the
-bugs from my own game project that motivated each check, set constraints, pushed
-back on designs I did not like, and approved what shipped. I did not write the
+My role was product owner, not implementer. I said what I wanted. I supplied
+the bugs from my own game project that motivated each check. I set constraints,
+rejected designs I did not like, and approved what shipped. I did not write the
 implementation.
 
-I am stating this plainly because it changes how you should review it. Treat this
-as code from a contributor whose reasoning you cannot interrogate directly. The
-design decisions below are documented precisely so you can judge them on their
-merits rather than on trust, and every claim about engine behavior was checked
-against Godot rather than asserted. If you would rather not take AI-written code
-into this project at all, that is a reasonable position and I would rather hear it
-now than after a pull request.
+I am stating this plainly because it changes how you should review it. Treat
+this as code from a contributor whose reasoning you cannot interrogate
+directly. This file documents each design decision, so you can judge it on the
+merits rather than on trust. I also checked every claim about engine behavior
+against Godot.
+
+You can also decide that this project does not accept AI-written code. That is
+a reasonable position. I would rather hear it now than after a pull request.
 
 ## How to try it
 
@@ -134,9 +135,9 @@ member: `Label` for `var clock: Label`, or a script class name, which resolves t
 file through the project's global class list. The walk stops as soon as a type
 cannot be determined, so an untyped member produces no verdict.
 
-Chains work with or without the `self.` prefix. For an unqualified chain, the root
-identifier must be a member of the script, and must not be shadowed by a local,
-parameter or loop variable in the same function.
+Chains work with or without the `self.` prefix. For an unqualified chain, the root identifier must be a member of the script. A
+local variable, a parameter or a loop variable in the same function must not
+shadow it.
 
 ### Deliberate design decisions
 
@@ -188,9 +189,9 @@ left to the existing `empty-function` check.
 
 ### Callers that are data, not code
 
-Godot calls methods by name from places that contain no code. Signal connections
-wired in the editor and AnimationPlayer method tracks both live in `.tscn` and
-`.tres` while embedded, and become binary `.res` or `.scn` once saved separately.
+Godot calls methods by name from places that contain no code. Signal connections wired in the editor and AnimationPlayer method tracks live
+in `.tscn` and `.tres` while embedded. Saved separately, they become binary
+`.res` or `.scn` files.
 Binary files are scanned by pulling identifier-shaped ASCII runs out of the bytes,
 which works because Godot stores strings in a plain UTF-8 table. Reading them can
 only add references, so a garbled read makes the check quieter rather than wrong.
@@ -269,9 +270,9 @@ produce identical output, so both directions have to be proven.
 
 ## What I would like
 
-I am not asking for a merge of this branch. If any of the checks look worth having,
-I will open a focused pull request per check against `main`, without the
-`copy.sh` tooling and with whatever changes you want first. I would rather agree on
+I am not asking for a merge of this branch. If any of the checks look worth having, I will open one pull request per check
+against `main`. Each would exclude the `copy.sh` tooling and include the
+changes you ask for. I would rather agree on
 the shape before writing that.
 
 That includes agreeing on whether you want AI-written contributions here at all.
