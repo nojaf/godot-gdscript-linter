@@ -302,8 +302,7 @@ Reported as WARNING, since dead code does not stop the game from running.
 
 ### What counts as a reference
 
-Deliberately generous. Every occurrence of the name anywhere in the project counts,
-so all of these keep a function alive:
+Every occurrence of the name in code counts, so all of these keep a function alive:
 
 ```gdscript
 demo.actually_called()                  # ordinary call
@@ -335,9 +334,19 @@ strings in these as plain UTF-8, so the identifier-shaped ASCII runs are extract
 directly from the bytes. Reading them can only ever *add* references, so a garbled
 read makes the check quieter, never wrong.
 
-Comments do **not** count — a function mentioned only in prose is still dead. Nor
-does a function naming *itself*: recursing, or returning its own name as a string,
-is not somebody else calling it.
+A string only counts where the string actually names a method — as an argument to
+`call`, `call_deferred`, `callv`, `call_group`, `has_method`, `rpc`, `rpc_id`,
+`connect`, `disconnect`, `is_connected`, `emit_signal`, `Callable` or `bind`.
+A string anywhere else is prose and does not:
+
+```gdscript
+print("all done")               # does NOT keep all() alive
+self.call("really_called")      # does
+```
+
+Comments do **not** count either — a function mentioned only in prose is still
+dead. Nor does a function naming *itself*: recursing, or returning its own name as
+a string, is not somebody else calling it.
 
 ```gdscript
 func unused_snowcat() -> String:
@@ -365,10 +374,12 @@ tokens, which was enough to hide a genuinely dead `all()` function.
 The check errs toward silence: it would rather miss dead code than tell you to
 delete something live.
 
-- A name shared with anything else in the project — a variable, a method of the
-  same name on another class, or an ordinary English word inside a string —
-  counts as a reference, so the function is not reported. Short common names
-  (`all`, `start`, `update`) are the most likely to be missed this way.
+- A name shared with anything else in the project — a variable, or a method of the
+  same name on another class — counts as a reference, so the function is not
+  reported.
+- A method name built or stored indirectly (`var m := "foo"` then `obj.call(m)`)
+  is not seen, and the function would be reported. Scene and resource files are
+  still scanned in full, so editor wiring is unaffected.
 - A script that fails to compile is skipped entirely, since its native base is
   unknown and every virtual override would otherwise look dead.
 

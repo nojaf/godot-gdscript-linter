@@ -4,12 +4,14 @@ class_name GDLintUnusedFunctionCheck
 extends RefCounted
 ## Reports functions that nothing in the project references.
 ##
-## Deliberately conservative: it counts every occurrence of the name anywhere in
-## the project -- calls, bare Callable references, names inside strings, and
-## method="..." wiring in scene files -- and only reports a function when the
-## name appears nowhere but its own declaration. That direction of error is the
-## safe one: it misses some dead code rather than telling you to delete
-## something that is live.
+## Conservative, but not credulous. A reference is any occurrence of the name in
+## code, plus a name inside a string only where that string actually names a
+## method -- call("foo"), Callable(self, "foo") -- plus method="..." wiring in
+## scene and resource files. A string anywhere else is prose: print("all done")
+## does not keep a function called `all` alive.
+##
+## Where it errs, it errs toward silence: it misses some dead code rather than
+## telling you to delete something that is live.
 ##
 ## Engine-called virtuals (_ready, _process, ...) are excluded by asking ClassDB
 ## what the native base class declares, so overriding them is never reported.
@@ -95,12 +97,13 @@ func _index_project(include_addons: bool) -> void:
 			continue
 
 		if extension == "gd":
-			# Comments are stripped so a function merely mentioned in prose does
-			# not count as a reference. String literals are KEPT, because
-			# call("foo") and Callable(self, "foo") are real references.
 			text = _strip_comments_preserving_strings(text)
 			_count_declarations(text)
+			for token in _countable_tokens(text):
+				_token_counts[token] = _token_counts.get(token, 0) + 1
+			continue
 
+		# Scene and resource text is data, not prose: scan all of it.
 		for token in _tokenize(text):
 			_token_counts[token] = _token_counts.get(token, 0) + 1
 
@@ -184,7 +187,9 @@ func _count_in_body(lines: Array, declaration_index: int, name: String, func_reg
 		var trimmed := raw.strip_edges()
 		if not trimmed.is_empty() and not trimmed.begins_with("#") and raw == trimmed:
 			break
-		for token in _tokenize(_strip_comments_preserving_strings(raw)):
+		# Same token policy as the project-wide index, so the two counts subtract
+		# cleanly against each other.
+		for token in _countable_tokens(_strip_comments_preserving_strings(raw)):
 			if token == name:
 				count += 1
 	return count
@@ -229,6 +234,91 @@ func _native_method_names(native: String) -> Dictionary:
 	for method in ClassDB.class_get_method_list(native):
 		names[method.name] = true
 	return names
+
+
+## Calls whose string arguments name a method. A string anywhere else is prose:
+## print("all done") must not keep a function called `all` alive.
+const METHOD_NAME_CALLS := [
+	"call", "call_deferred", "callv", "call_group", "call_group_flags",
+	"has_method", "rpc", "rpc_id", "connect", "disconnect", "is_connected",
+	"emit_signal", "Callable", "bind",
+]
+
+
+# Identifiers that count as references in GDScript source: everything outside
+# string literals, plus the contents of strings sitting in a method-name position.
+func _countable_tokens(text: String) -> PackedStringArray:
+	var spans := _string_spans(text)
+	var without_strings := _blank_spans(text, spans)
+
+	var tokens := _tokenize(without_strings)
+	for span in _method_name_spans(without_strings):
+		for string_span in spans:
+			if string_span.start >= span[0] and string_span.start < span[1]:
+				tokens.append_array(_tokenize(text.substr(
+					string_span.start + 1, string_span.end - string_span.start - 1)))
+	return tokens
+
+
+# Start/end offsets of every string literal, so they can be blanked out and then
+# selectively read back. Triple-quoted blocks are handled as one span.
+func _string_spans(text: String) -> Array:
+	var spans: Array = []
+	var i := 0
+	while i < text.length():
+		var ch := text[i]
+		if ch != "\"" and ch != "'":
+			i += 1
+			continue
+
+		var triple := text.substr(i, 3) == ch.repeat(3)
+		var closer := ch.repeat(3) if triple else ch
+		var start := i
+		i += closer.length()
+		while i < text.length():
+			if text[i] == "\\":
+				i += 2
+				continue
+			if text.substr(i, closer.length()) == closer:
+				i += closer.length()
+				break
+			i += 1
+		spans.append({"start": start, "end": i - 1})
+	return spans
+
+
+# Replaces each span with spaces, keeping every offset where it was.
+func _blank_spans(text: String, spans: Array) -> String:
+	var out := text
+	for span in spans:
+		var length: int = span.end - span.start + 1
+		out = out.substr(0, span.start) + " ".repeat(length) + out.substr(span.end + 1)
+	return out
+
+
+# Argument-list spans of the calls above, found in string-free text so a call
+# name mentioned inside a string cannot open one.
+func _method_name_spans(without_strings: String) -> Array:
+	var opener := RegEx.new()
+	# Only a preceding word character disqualifies a match (so `recall(` is not
+	# `call(`). A preceding dot must NOT: these are nearly always written as
+	# self.call(...) or node.rpc(...).
+	opener.compile("(?<!\\w)(" + "|".join(METHOD_NAME_CALLS) + ")\\s*\\(")
+
+	var spans: Array = []
+	for found in opener.search_all(without_strings):
+		var depth := 0
+		var start := found.get_end() - 1
+		for i in range(start, without_strings.length()):
+			var ch := without_strings[i]
+			if ch == "(":
+				depth += 1
+			elif ch == ")":
+				depth -= 1
+				if depth == 0:
+					spans.append([start, i])
+					break
+	return spans
 
 
 func _tokenize(text: String) -> PackedStringArray:
