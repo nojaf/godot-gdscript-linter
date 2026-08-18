@@ -1,12 +1,13 @@
 # Branch notes — `nojaf`
 
-This branch adds four things to `graydwarf/godot-gdscript-linter`. It is a fork
-branch, kept as one piece so the work can be read in context. It is not a pull
-request, and nothing here is meant to land as-is.
+This branch collects several additions to `graydwarf/godot-gdscript-linter`. It is
+a fork branch, kept as one piece so the work can be read in context. It is not a
+pull request, and nothing here is meant to land as-is.
 
 I wrote this file for the maintainer. It states what each change does, why I think
-the linter is the right place for it, and what it costs. Three of the four are
-offered upstream. The fourth is local tooling and should stay here.
+the linter is the right place for it, and what it costs. The table below marks
+which changes are offered upstream. The `copy.sh` tooling is local to my workflow
+and is not.
 
 Branch point: `aeeae7d`, the tip of `main` at the time.
 
@@ -56,7 +57,7 @@ Every check is behind its own opt-in flag and off by default. No existing output
 exit code, config key or dock behavior changes. A user who does not pass the new
 flags sees exactly what they saw before.
 
-The three checks are CLI-only. None of them appear in the editor dock, because I
+The checks are CLI-only. None of them appear in the editor dock, because I
 develop this project from an external editor and never open the dock. Wiring them
 into the dock is work I have not done.
 
@@ -268,8 +269,8 @@ produce identical output, so both directions have to be proven.
 
 ## What I would like
 
-I am not asking for a merge of this branch. If any of the three checks look worth
-having, I will open a focused pull request per check against `main`, without the
+I am not asking for a merge of this branch. If any of the checks look worth having,
+I will open a focused pull request per check against `main`, without the
 `copy.sh` tooling and with whatever changes you want first. I would rather agree on
 the shape before writing that.
 
