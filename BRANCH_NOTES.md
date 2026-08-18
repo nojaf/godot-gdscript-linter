@@ -48,7 +48,7 @@ engine, and that requires the project's script class cache to exist.
 |--------|---------|------------------|
 | `--sarif`: SARIF 2.1.0 output, plus `--spaces` and `--output` for machine formats | `9b0d139`, `e7a2f8d` | Yes |
 | `--check-members`: verify member access, signal emit arity, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Yes |
-| `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `77f1d87` | Yes |
+| `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Yes |
 | `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Yes |
 | `copy.sh`: install the addon into a project and generate a `lint.sh` wrapper | `9b672f3` | No, local workflow |
 
