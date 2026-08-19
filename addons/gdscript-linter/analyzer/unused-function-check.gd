@@ -4,86 +4,205 @@ class_name GDLintUnusedFunctionCheck
 extends RefCounted
 ## Reports functions that nothing in the project references.
 ##
-## Conservative, but not credulous. A reference is any occurrence of the name in
-## code, plus a name inside a string only where that string actually names a
-## method -- call("foo"), Callable(self, "foo") -- plus method="..." wiring in
-## scene and resource files. A string anywhere else is prose: print("all done")
-## does not keep a function called `all` alive.
+## Structure comes from GDLintSourceIndex, which parses the source properly.
+## Meaning comes from the engine: ClassDB says which methods are engine virtuals,
+## so overriding `_ready` is never reported.
 ##
-## Where it errs, it errs toward silence: it misses some dead code rather than
-## telling you to delete something that is live.
+## Conservative, but not credulous. A reference is an identifier occurrence in
+## code, a segment of a member chain, or a string that actually names a method
+## (`call("foo")`, `Callable(self, "foo")`). A string anywhere else is prose, so
+## `print("all done")` does not keep `all()` alive.
 ##
-## Engine-called virtuals (_ready, _process, ...) are excluded by asking ClassDB
-## what the native base class declares, so overriding them is never reported.
-##
-## Placeholder bodies (just `pass`) are skipped -- the empty-function check
-## already covers those, and a placeholder is usually intentional.
+## Scene and resource files are still read as text here, because the index covers
+## .gd only and Godot calls methods by name from data: signal connections wired in
+## the editor, and AnimationPlayer method tracks.
 
 const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_UNUSED_FUNCTION := "unused-function"
 
-## GDScript allows annotations before a declaration on the same line:
-##     @abstract func may_target(candidate: Critter) -> bool
-## A pattern anchored at `func` misses those, and the miss is silent rather than
-## noisy: the declaration never registers, while its text still counts as an
-## occurrence that keeps the implementation looking alive.
-const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
+## Calls whose string arguments name a method.
+const METHOD_NAME_CALLS := [
+	"call", "call_deferred", "callv", "call_group", "call_group_flags",
+	"has_method", "rpc", "rpc_id", "connect", "disconnect", "is_connected",
+	"emit_signal", "Callable", "bind",
+]
 
-## Text files searched for references. Scene and resource files matter because
-## Godot itself calls methods by name from data rather than from code:
-##   .tscn  [connection ... method="_on_button_pressed"]
-##   .tscn  AnimationPlayer method tracks: "method": &"spawn_wave"
-##   .tres  the same, once an animation is saved outside its scene
-## .cs is here for Mono projects calling into GDScript by name.
-const REFERENCE_TEXT_EXTENSIONS := ["gd", "tscn", "tres", "cs", "json", "cfg"]
-
-## Binary equivalents of the above. Godot stores strings in these as plain UTF-8,
-## so the ASCII runs are readable even though the container is not. Scanning them
-## can only ADD references, so a false read makes the check quieter, never wronger.
-const REFERENCE_BINARY_EXTENSIONS := ["res", "scn"]
+## Data files Godot calls methods from, which the index does not parse.
+const DATA_TEXT_EXTENSIONS := ["tscn", "tres", "cs", "json", "cfg"]
+const DATA_BINARY_EXTENSIONS := ["res", "scn"]
 
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
-# Identifier -> how many times it appears anywhere in the project.
-var _token_counts := {}
-# Function name -> how many times it is DECLARED across the project.
+# Identifier -> occurrences anywhere in the project.
+var _occurrences := {}
+# Function name -> how many times it is declared.
 var _declaration_counts := {}
 
 
-## Report unused functions in the given res:// script paths. References are
-## searched project-wide regardless of which paths are being reported on, so
-## narrowing the analysis scope cannot manufacture false positives.
-func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
+## Report unused functions in the given res:// paths, using a built index.
+func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	_respect_ignores = p_respect_ignores
-	_token_counts.clear()
+	_occurrences.clear()
 	_declaration_counts.clear()
 
-	# addons/ is third-party code and is excluded from analysis by default. Its
-	# text must not count as references either: the linter's own installed copy
-	# contains ~80 standalone `all` tokens, which was enough to hide a real dead
-	# `all()` in the project being analyzed. Only index it when it is what is
-	# being analyzed (dogfooding the addon itself).
 	var include_addons := false
 	for path: String in file_paths:
 		if _is_addon_path(path):
 			include_addons = true
 			break
 
-	_index_project(include_addons)
+	_count_from_index(index, include_addons)
+	_count_from_data_files(include_addons)
 
-	# Collect first, report second. A name declared in several places -- a base
-	# plus its overrides, or an @abstract declaration plus its implementations --
-	# is one dead contract, not one problem per site.
 	var candidates: Array = []
-	for path in file_paths:
-		candidates.append_array(_check_file(path))
+	for path: String in file_paths:
+		candidates.append_array(_check_file(index, path))
 	return _group_by_name(candidates)
 
 
-# One issue per unreferenced name, at its first declaration in path order. The
-# message carries the number of sites so the others are not a surprise.
+# Every identifier the index saw, from all three places a name can appear.
+#
+# Chain segments are NOT emitted as reference records, so counting references
+# alone would make every `self.foo()` call invisible and report live methods as
+# dead. That is the dangerous direction.
+func _count_from_index(index: GDLintSourceIndex, include_addons: bool) -> void:
+	for path: String in index.files:
+		if not include_addons and _is_addon_path(path):
+			continue
+		var entry: Dictionary = index.files[path]
+
+		for reference: Dictionary in entry.references:
+			_add(String(reference.get("name", "")))
+
+		for chain: Dictionary in entry.member_chains:
+			for segment: Dictionary in chain.get("segments", []):
+				_add(String(segment.get("name", "")))
+
+		for literal: Dictionary in entry.string_literals:
+			var argument_of: Dictionary = literal.get("argument_of", {})
+			if METHOD_NAME_CALLS.has(String(argument_of.get("callee", ""))):
+				_add(String(literal.get("value", "")))
+
+		for declaration: Dictionary in entry.declarations:
+			if String(declaration.get("kind", "")) == "function":
+				var name := String(declaration.get("name", ""))
+				_declaration_counts[name] = _declaration_counts.get(name, 0) + 1
+
+
+func _add(name: String) -> void:
+	if name.is_empty():
+		return
+	_occurrences[name] = _occurrences.get(name, 0) + 1
+
+
+# A method wired to a signal in the editor, or fired from an AnimationPlayer
+# track, appears only in scene and resource data.
+func _count_from_data_files(include_addons: bool) -> void:
+	var identifier := RegEx.new()
+	identifier.compile("[A-Za-z_][A-Za-z0-9_]*")
+
+	for path: String in _collect_data_files("res://"):
+		if not include_addons and _is_addon_path(path):
+			continue
+
+		if DATA_BINARY_EXTENSIONS.has(path.get_extension().to_lower()):
+			for token in _extract_ascii_identifiers(path):
+				_add(token)
+			continue
+
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var text := file.get_as_text()
+		file.close()
+		for found in identifier.search_all(text):
+			_add(found.get_string())
+
+
+func _check_file(index: GDLintSourceIndex, path: String) -> Array:
+	var entry: Dictionary = index.file_records(path)
+	if entry.is_empty() or entry.get("parse_error", false):
+		return []  # nothing trustworthy to say about a file that did not parse
+
+	var script: Script = load(path) as Script
+	if script == null or script.get_instance_base_type().is_empty():
+		return []
+	var virtuals := _native_method_names(script.get_instance_base_type())
+
+	if _respect_ignores:
+		_ignore_handler.initialize(_read_lines(path))
+
+	var candidates: Array = []
+	for declaration: Dictionary in entry.declarations:
+		if String(declaration.get("kind", "")) != "function":
+			continue
+
+		var name := String(declaration.get("name", ""))
+		var line := GDLintSourceIndex.line_of(declaration)
+
+		# A `pass` body is an intentional stub; empty-function already covers it.
+		if bool(declaration.get("body_is_pass_only", false)):
+			continue
+		if virtuals.has(name):
+			continue
+		if _is_referenced(name, _self_occurrences(entry, declaration)):
+			continue
+		if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNUSED_FUNCTION):
+			continue
+
+		candidates.append({"name": name, "path": path, "line": line})
+
+	if _respect_ignores:
+		_ignore_handler.clear()
+	return candidates
+
+
+# Mentions of a function's own name inside its own body. A function that only
+# recurses, or that returns its own name as a string, is still dead. Scope makes
+# this exact: records inside `func foo` at file level carry scope "foo".
+func _self_occurrences(entry: Dictionary, declaration: Dictionary) -> int:
+	var outer := String(declaration.get("scope", ""))
+	var name := String(declaration.get("name", ""))
+	var body_scope := name if outer.is_empty() else outer + "." + name
+
+	var count := 0
+	for reference: Dictionary in entry.references:
+		if String(reference.get("scope", "")) == body_scope \
+				and String(reference.get("name", "")) == name:
+			count += 1
+	for chain: Dictionary in entry.member_chains:
+		if String(chain.get("scope", "")) != body_scope:
+			continue
+		for segment: Dictionary in chain.get("segments", []):
+			if String(segment.get("name", "")) == name:
+				count += 1
+	for literal: Dictionary in entry.string_literals:
+		if String(literal.get("scope", "")) != body_scope:
+			continue
+		var argument_of: Dictionary = literal.get("argument_of", {})
+		if METHOD_NAME_CALLS.has(String(argument_of.get("callee", ""))) \
+				and String(literal.get("value", "")) == name:
+			count += 1
+	return count
+
+
+# Occurrences count uses, never declarations: the index reports a declaration as
+# its own record and does not also emit a reference for the name being declared.
+# The previous text-based version had to subtract declarations because scanning
+# tokens counted the `func foo` line itself. Subtracting here instead cancels out
+# real call sites, which reports live functions as dead.
+#
+# Mentions inside the function's own body are still discounted. A function that
+# only recurses, or that returns its own name as a string, is dead.
+func _is_referenced(name: String, self_occurrences: int) -> bool:
+	return _occurrences.get(name, 0) - self_occurrences > 0
+
+
+# One issue per unreferenced name, at its first declaration in path order. A base
+# plus its overrides, or an @abstract declaration plus its implementations, is one
+# dead contract rather than one problem per site.
 func _group_by_name(candidates: Array) -> Array:
 	var by_name := {}
 	for candidate in candidates:
@@ -110,8 +229,18 @@ func _group_by_name(candidates: Array) -> Array:
 	return issues
 
 
-# Analyzed paths arrive with or without the res:// prefix depending on how the
-# target was given on the command line, so both forms have to be recognized.
+# NOTE: ClassDB.class_has_method() reports false for virtuals like _ready, while
+# the method LIST includes them. Using has_method here would mark every lifecycle
+# override as dead code.
+func _native_method_names(native: String) -> Dictionary:
+	var names := {}
+	if native.is_empty():
+		return names
+	for method in ClassDB.class_get_method_list(native):
+		names[method.name] = true
+	return names
+
+
 func _is_addon_path(path: String) -> bool:
 	var normalized := path.replace("\\", "/")
 	if normalized.begins_with("res://"):
@@ -119,277 +248,7 @@ func _is_addon_path(path: String) -> bool:
 	return normalized.begins_with("addons/")
 
 
-func _index_project(include_addons: bool) -> void:
-	for path: String in _collect_project_files("res://"):
-		if not include_addons and _is_addon_path(path):
-			continue
-		var extension := path.get_extension().to_lower()
-
-		if REFERENCE_BINARY_EXTENSIONS.has(extension):
-			for token in _extract_ascii_identifiers(path):
-				_token_counts[token] = _token_counts.get(token, 0) + 1
-			continue
-
-		var text := _read_text(path)
-		if text.is_empty():
-			continue
-
-		if extension == "gd":
-			text = _strip_comments_preserving_strings(text)
-			_count_declarations(text)
-			for token in _countable_tokens(text):
-				_token_counts[token] = _token_counts.get(token, 0) + 1
-			continue
-
-		# Scene and resource text is data, not prose: scan all of it.
-		for token in _tokenize(text):
-			_token_counts[token] = _token_counts.get(token, 0) + 1
-
-
-# Returns candidate declarations, not issues: grouping happens in run().
-func _check_file(path: String) -> Array:
-	var script: Script = load(path) as Script
-	# Without a compiled script the native base is unknown, so engine virtuals
-	# cannot be identified and every _ready() would look dead. Skip the file.
-	if script == null or script.get_instance_base_type().is_empty():
-		return []
-
-	var virtuals := _native_method_names(script.get_instance_base_type())
-
-	var lines := _read_lines(path)
-	if lines.is_empty():
-		return []
-
-	if _respect_ignores:
-		_ignore_handler.initialize(lines)
-
-	var candidates: Array = []
-	for declaration in _find_declarations(lines):
-		var name: String = declaration.name
-
-		if declaration.is_placeholder:
-			continue
-		if virtuals.has(name):
-			continue
-		if _is_referenced(name, declaration.self_occurrences):
-			continue
-		if _respect_ignores and _ignore_handler.should_ignore(declaration.line, CHECK_UNUSED_FUNCTION):
-			continue
-
-		candidates.append({"name": name, "path": path, "line": declaration.line})
-
-	if _respect_ignores:
-		_ignore_handler.clear()
-	return candidates
-
-
-# Every declaration contributes one occurrence of its own name, and mentions
-# inside the function's own body are not somebody else calling it -- a function
-# that only recurses, or that returns its own name as a string, is still dead.
-# What is left after discounting both is a genuine reference.
-func _is_referenced(name: String, self_occurrences: int) -> bool:
-	var occurrences: int = _token_counts.get(name, 0)
-	var declarations: int = _declaration_counts.get(name, 1)
-	return occurrences - declarations - self_occurrences > 0
-
-
-func _find_declarations(lines: Array) -> Array:
-	var func_regex := RegEx.new()
-	func_regex.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
-
-	var declarations: Array = []
-	for i in range(lines.size()):
-		var found := func_regex.search(String(lines[i]))
-		if found == null:
-			continue
-		var name := found.get_string(1)
-		declarations.append({
-			"name": name,
-			"line": i + 1,
-			"is_placeholder": _is_placeholder_body(lines, i),
-			"self_occurrences": _count_in_body(lines, i, name, func_regex),
-		})
-	return declarations
-
-
-# How often the function names itself inside its own body. Comments are stripped
-# to match how the project-wide index was built, so the two counts are comparable.
-func _count_in_body(lines: Array, declaration_index: int, name: String, func_regex: RegEx) -> int:
-	var count := 0
-	for i in range(declaration_index + 1, lines.size()):
-		var raw: String = String(lines[i])
-		# The body ends at the next function, or at the next class-level line.
-		if func_regex.search(raw) != null:
-			break
-		var trimmed := raw.strip_edges()
-		if not trimmed.is_empty() and not trimmed.begins_with("#") and raw == trimmed:
-			break
-		# Same token policy as the project-wide index, so the two counts subtract
-		# cleanly against each other.
-		for token in _countable_tokens(_strip_comments_preserving_strings(raw)):
-			if token == name:
-				count += 1
-	return count
-
-
-# True when the body contains nothing but `pass`. Those are intentional stubs and
-# the empty-function check already reports them.
-func _is_placeholder_body(lines: Array, declaration_index: int) -> bool:
-	var body_indent := -1
-	for i in range(declaration_index + 1, lines.size()):
-		var raw: String = String(lines[i])
-		var trimmed := raw.strip_edges()
-		if trimmed.is_empty() or trimmed.begins_with("#"):
-			continue
-
-		var indent := raw.length() - raw.strip_edges(true, false).length()
-		if body_indent == -1:
-			body_indent = indent
-		elif indent < body_indent:
-			break  # dedented out of the body
-
-		if trimmed != "pass":
-			return false
-	return body_indent != -1
-
-
-func _count_declarations(text: String) -> void:
-	var func_regex := RegEx.new()
-	func_regex.compile("(?m)^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
-	for found in func_regex.search_all(text):
-		var name := found.get_string(1)
-		_declaration_counts[name] = _declaration_counts.get(name, 0) + 1
-
-
-func _native_method_names(native: String) -> Dictionary:
-	var names := {}
-	if native.is_empty():
-		return names
-	# NOTE: ClassDB.class_has_method() reports false for virtuals like _ready,
-	# but the method LIST includes them. Using has_method here would mark every
-	# lifecycle override as dead code.
-	for method in ClassDB.class_get_method_list(native):
-		names[method.name] = true
-	return names
-
-
-## Calls whose string arguments name a method. A string anywhere else is prose:
-## print("all done") must not keep a function called `all` alive.
-const METHOD_NAME_CALLS := [
-	"call", "call_deferred", "callv", "call_group", "call_group_flags",
-	"has_method", "rpc", "rpc_id", "connect", "disconnect", "is_connected",
-	"emit_signal", "Callable", "bind",
-]
-
-
-# Identifiers that count as references in GDScript source: everything outside
-# string literals, plus the contents of strings sitting in a method-name position.
-func _countable_tokens(text: String) -> PackedStringArray:
-	var spans := _string_spans(text)
-	var without_strings := _blank_spans(text, spans)
-
-	var tokens := _tokenize(without_strings)
-	for span in _method_name_spans(without_strings):
-		for string_span in spans:
-			if string_span.start >= span[0] and string_span.start < span[1]:
-				tokens.append_array(_tokenize(text.substr(
-					string_span.start + 1, string_span.end - string_span.start - 1)))
-	return tokens
-
-
-# Start/end offsets of every string literal, so they can be blanked out and then
-# selectively read back. Triple-quoted blocks are handled as one span.
-func _string_spans(text: String) -> Array:
-	var spans: Array = []
-	var i := 0
-	while i < text.length():
-		var ch := text[i]
-		if ch != "\"" and ch != "'":
-			i += 1
-			continue
-
-		var triple := text.substr(i, 3) == ch.repeat(3)
-		var closer := ch.repeat(3) if triple else ch
-		var start := i
-		i += closer.length()
-		while i < text.length():
-			if text[i] == "\\":
-				i += 2
-				continue
-			if text.substr(i, closer.length()) == closer:
-				i += closer.length()
-				break
-			i += 1
-		spans.append({"start": start, "end": i - 1})
-	return spans
-
-
-# Replaces each span with spaces, keeping every offset where it was.
-func _blank_spans(text: String, spans: Array) -> String:
-	var out := text
-	for span in spans:
-		var length: int = span.end - span.start + 1
-		out = out.substr(0, span.start) + " ".repeat(length) + out.substr(span.end + 1)
-	return out
-
-
-# Argument-list spans of the calls above, found in string-free text so a call
-# name mentioned inside a string cannot open one.
-func _method_name_spans(without_strings: String) -> Array:
-	var opener := RegEx.new()
-	# Only a preceding word character disqualifies a match (so `recall(` is not
-	# `call(`). A preceding dot must NOT: these are nearly always written as
-	# self.call(...) or node.rpc(...).
-	opener.compile("(?<!\\w)(" + "|".join(METHOD_NAME_CALLS) + ")\\s*\\(")
-
-	var spans: Array = []
-	for found in opener.search_all(without_strings):
-		var depth := 0
-		var start := found.get_end() - 1
-		for i in range(start, without_strings.length()):
-			var ch := without_strings[i]
-			if ch == "(":
-				depth += 1
-			elif ch == ")":
-				depth -= 1
-				if depth == 0:
-					spans.append([start, i])
-					break
-	return spans
-
-
-func _tokenize(text: String) -> PackedStringArray:
-	var identifier := RegEx.new()
-	identifier.compile("[A-Za-z_][A-Za-z0-9_]*")
-	var tokens := PackedStringArray()
-	for found in identifier.search_all(text):
-		tokens.append(found.get_string())
-	return tokens
-
-
-# Cuts each line at its first unquoted '#'. String contents are preserved so that
-# names referenced only from strings still count.
-func _strip_comments_preserving_strings(text: String) -> String:
-	var out := PackedStringArray()
-	for raw in text.split("\n"):
-		var line: String = raw
-		var quote := ""
-		var cut := -1
-		for i in range(line.length()):
-			var ch := line[i]
-			if quote.is_empty():
-				if ch == "\"" or ch == "'":
-					quote = ch
-				elif ch == "#":
-					cut = i
-					break
-			elif ch == quote:
-				quote = ""
-		out.append(line.substr(0, cut) if cut >= 0 else line)
-	return "\n".join(out)
-
-
-func _collect_project_files(root: String) -> Array:
+func _collect_data_files(root: String) -> Array:
 	var found: Array = []
 	var pending: Array = [root]
 	while not pending.is_empty():
@@ -408,16 +267,15 @@ func _collect_project_files(root: String) -> Array:
 				pending.append(full)
 			else:
 				var extension := entry.get_extension().to_lower()
-				if REFERENCE_TEXT_EXTENSIONS.has(extension) or REFERENCE_BINARY_EXTENSIONS.has(extension):
+				if DATA_TEXT_EXTENSIONS.has(extension) or DATA_BINARY_EXTENSIONS.has(extension):
 					found.append(full)
 			entry = dir.get_next()
 		dir.list_dir_end()
 	return found
 
 
-# Pulls identifier-shaped ASCII runs out of a binary resource. Godot's binary
-# format keeps strings in a plain UTF-8 table, so a method name stored in an
-# animation track survives as readable bytes.
+# Godot keeps strings in binary resources as a plain UTF-8 table, so a method name
+# in an animation track survives as readable bytes.
 func _extract_ascii_identifiers(path: String) -> PackedStringArray:
 	var tokens := PackedStringArray()
 	var file := FileAccess.open(path, FileAccess.READ)
@@ -430,10 +288,10 @@ func _extract_ascii_identifiers(path: String) -> PackedStringArray:
 	var current := PackedByteArray()
 	for byte in bytes:
 		var is_identifier_char := (
-			(byte >= 65 and byte <= 90) or    # A-Z
-			(byte >= 97 and byte <= 122) or   # a-z
-			(byte >= 48 and byte <= 57) or    # 0-9
-			byte == 95)                       # _
+			(byte >= 65 and byte <= 90) or
+			(byte >= 97 and byte <= 122) or
+			(byte >= 48 and byte <= 57) or
+			byte == 95)
 		if is_identifier_char:
 			current.append(byte)
 		else:
@@ -442,21 +300,13 @@ func _extract_ascii_identifiers(path: String) -> PackedStringArray:
 				current.clear()
 	if current.size() > 0:
 		tokens.append(current.get_string_from_ascii())
-
 	return tokens
 
 
-func _read_text(path: String) -> String:
+func _read_lines(path: String) -> Array:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return ""
+		return []
 	var content := file.get_as_text()
 	file.close()
-	return content
-
-
-func _read_lines(path: String) -> Array:
-	var text := _read_text(path)
-	if text.is_empty():
-		return []
-	return Array(text.split("\n"))
+	return Array(content.split("\n"))

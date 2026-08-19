@@ -110,6 +110,9 @@ cat > "$LINT_SCRIPT" <<'LINT_EOF'
 # And with --check-exports, which reports object-typed @export vars that nothing
 # null-guards. NO_EXPORT_CHECK=1 skips it.
 #
+# Some checks need structure from `gdscript-formatter index`. The wrapper finds
+# that binary the same way it finds Godot. Set GDLINT_FORMATTER to pin one.
+#
 # Set GODOT=/path/to/godot to pin a specific binary.
 #
 # Exit codes: 0 = clean, 1 = warnings, 2 = critical issues.
@@ -149,6 +152,34 @@ find_godot() {
 if ! GODOT_BIN="$(find_godot)"; then
 	echo "error: no Godot binary found — put 'godot' on PATH or set GODOT=/path/to/godot" >&2
 	exit 127
+fi
+
+# The member and unused-function checks read structure from this. Resolving it
+# here means the analyzer never has to guess, and a missing binary is reported
+# by the analyzer with a clear message rather than silently checking less.
+find_formatter() {
+	if [ -n "${GDLINT_FORMATTER:-}" ]; then
+		printf '%s\n' "$GDLINT_FORMATTER"
+		return 0
+	fi
+	if command -v gdscript-formatter >/dev/null 2>&1; then
+		command -v gdscript-formatter
+		return 0
+	fi
+	local candidate
+	for candidate in \
+		"$HOME/Projects/GDScript-formatter/target/release/gdscript-formatter" \
+		"$HOME/Projects/GDScript-formatter/target/debug/gdscript-formatter"; do
+		if [ -x "$candidate" ]; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+if FORMATTER_BIN="$(find_formatter)"; then
+	export GDLINT_FORMATTER="$FORMATTER_BIN"
 fi
 
 ADDON_DIR="$PROJECT_DIR/addons/gdscript-linter"

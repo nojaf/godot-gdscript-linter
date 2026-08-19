@@ -28,6 +28,7 @@ var _no_ignore: bool = false  # Bypass all gdlint:ignore directives
 var _check_members: bool = false  # Also load every script and verify self.foo.bar chains
 var _check_unused_functions: bool = false  # Also report functions nothing references
 var _check_exports: bool = false  # Also report @export object vars with no null guard
+var _source_index: GDLintSourceIndex = null  # Structure, built once per run
 var _config_path: String = ""  # Custom config file path
 var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
 var _check_filter: Array[String] = []  # Specific checks to run
@@ -201,6 +202,11 @@ func _run_analysis() -> void:
 		else:
 			_merge_results(merged_result, result)
 
+	if _check_unused_functions:
+		_source_index = _build_source_index(merged_result)
+		if _source_index == null:
+			return  # _build_source_index already reported why
+
 	if _check_members:
 		_run_member_check(merged_result, config)
 
@@ -249,13 +255,35 @@ func _run_member_check(result, config) -> void:
 
 # References are searched project-wide inside the check itself, so a narrowed
 # analysis scope cannot turn a live function into a false positive.
+# Structure for the checks that need it, built once per run. A failure here is
+# fatal: reporting nothing looks exactly like a clean project, so the run must
+# stop and say why rather than quietly checking less.
+func _build_source_index(result) -> GDLintSourceIndex:
+	var excluded: Array = []
+	var scanning_addons := false
+	for file_result in result.file_results:
+		if String(file_result.file_path).replace("res://", "").begins_with("addons/"):
+			scanning_addons = true
+			break
+	if not scanning_addons:
+		excluded.append(ProjectSettings.globalize_path("res://addons"))
+
+	var index := GDLintSourceIndex.new()
+	if not index.build(excluded):
+		push_error("gdscript-linter: %s" % index.error)
+		printerr("gdscript-linter: %s" % index.error)
+		_exit_code = 3
+		return null
+	return index
+
+
 func _run_unused_function_check(result, config) -> void:
 	var paths: Array = []
 	for file_result in result.file_results:
 		paths.append(file_result.file_path)
 
 	var unused_check := GDLintUnusedFunctionCheck.new()
-	for issue in unused_check.run(paths, config.respect_ignore_directives):
+	for issue in unused_check.run(_source_index, paths, config.respect_ignore_directives):
 		result.add_issue(issue)
 
 
