@@ -202,7 +202,7 @@ func _run_analysis() -> void:
 		else:
 			_merge_results(merged_result, result)
 
-	if _check_unused_functions:
+	if _check_members or _check_unused_functions or _check_exports:
 		_source_index = _build_source_index(merged_result)
 		if _source_index == null:
 			return  # _build_source_index already reported why
@@ -249,7 +249,7 @@ func _run_member_check(result, config) -> void:
 		paths.append(file_result.file_path)
 
 	var member_check := GDLintMemberCheck.new()
-	for issue in member_check.run(paths, config.respect_ignore_directives):
+	for issue in member_check.run(_source_index, paths, config.respect_ignore_directives):
 		result.add_issue(issue)
 
 
@@ -293,7 +293,7 @@ func _run_export_check(result, config) -> void:
 		paths.append(file_result.file_path)
 
 	var export_check := GDLintExportCheck.new()
-	for issue in export_check.run(paths, config.respect_ignore_directives):
+	for issue in export_check.run(_source_index, paths, config.respect_ignore_directives):
 		result.add_issue(issue)
 
 

@@ -2,32 +2,28 @@
 # https://poplava.itch.io
 class_name GDLintMemberCheck
 extends RefCounted
-## Verifies that every `self.foo.bar` chain actually resolves, by asking the
-## engine what members a type has instead of parsing declarations.
+## Verifies that member access resolves, by joining two sources.
 ##
-## Three findings, all CRITICAL:
+## GDLintSourceIndex says where things are written: member chains with their
+## segments, whether each segment is a call, argument counts, and the scope each
+## sits in. The engine says what things mean: every member of a type including
+## inherited ones, declared types, and signal arity.
+##
+## Four findings, all CRITICAL:
 ##   script-load-failed   - the script does not compile, so nothing in it can be
 ##                          checked (Godot prints the parse error, on stderr)
-##   unknown-member       - a name in the chain is not a member of the type it is
-##                          being read from
+##   unknown-member       - a name in a chain is not a member of the type it is
+##                          read from
 ##   wrong-argument-count - a signal is emitted with the wrong argument count
 ##   method-not-called    - a method is used as a condition without being called
 ##
-## Why this is needed at all: GDScript resolves property access through `self`
-## at runtime, and does not verify property access on typed object variables
-## either. Both of these compile clean and fail only when the line executes:
+## GDScript verifies none of these at parse time. Property access through `self`
+## is resolved at runtime, property access on typed object variables is not
+## verified either, signal emit arity is not checked, and a bare method reference
+## in a condition is a Callable, which is always true.
 ##
-##     self.clock_labl.text = "x"   # no such member on this script
-##     self.clock.ziggy = "x"       # clock is a Label; Label has no 'ziggy'
-##     self.stopped_walking.emit()  # the signal takes one argument
-##     if self.any_enemy_walking:   # a Callable, so the branch is always taken
-##
-## Method call arity is NOT checked here: Godot's parser already rejects those,
-## so a bad call surfaces as script-load-failed. Signal emits are the only arity
-## it lets through.
-##
-## Requires files on disk to be current and the project to have been imported —
-## a stale script class cache makes every script fail to load.
+## Method call arity is deliberately absent: Godot's own parser rejects those, so
+## a bad call surfaces here as script-load-failed instead.
 
 const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
@@ -36,16 +32,6 @@ const CHECK_UNKNOWN_MEMBER := "unknown-member"
 const CHECK_ARGUMENT_COUNT := "wrong-argument-count"
 const CHECK_METHOD_NOT_CALLED := "method-not-called"
 
-## GDScript allows annotations before a declaration on the same line:
-##     @abstract func may_target(candidate: Critter) -> bool
-## A pattern anchored at `func` misses those, and the miss is silent rather than
-## noisy: the declaration never registers, while its text still counts as an
-## occurrence that keeps the implementation looking alive.
-const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
-
-## How far a call's argument list may span before we give up counting it.
-const MAX_CALL_LINES := 60
-
 ## Scripts overriding any of these can answer to names that exist in no member
 ## list, so they are skipped entirely.
 const DYNAMIC_PROPERTY_HOOKS := ["_get_property_list", "_set", "_get"]
@@ -53,21 +39,21 @@ const DYNAMIC_PROPERTY_HOOKS := ["_get_property_list", "_set", "_get"]
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
-# class name -> {names: Dictionary, types: Dictionary}, built on demand.
+# Type name -> {names, types, signals, methods}, built on demand.
 var _member_cache := {}
 # class_name -> res:// path, for classes declared by project scripts.
 var _global_classes := {}
 
 
 ## Run over the given res:// script paths, returning an Array of Issue.
-func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
+func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	_respect_ignores = p_respect_ignores
 	_member_cache.clear()
 	_build_global_class_map()
 
 	var scripts := {}      # path -> Script, null when it failed to compile
 	var broken: Array = []
-	for path in file_paths:
+	for path: String in file_paths:
 		var script: Script = load(path) as Script
 		# load() hands back a non-null but uncompiled Script for a broken file;
 		# an empty instance base type is what actually marks it unusable.
@@ -80,10 +66,10 @@ func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	var issues: Array = []
 	issues.append_array(_report_load_failures(broken, scripts))
 
-	for path in file_paths:
+	for path: String in file_paths:
 		if scripts[path] == null:
 			continue
-		issues.append_array(_check_file(path, scripts[path]))
+		issues.append_array(_check_file(index, path, scripts[path]))
 
 	return issues
 
@@ -99,13 +85,13 @@ func _build_global_class_map() -> void:
 # fold the dependents into its message rather than listing every consequence.
 func _report_load_failures(broken: Array, scripts: Dictionary) -> Array:
 	var class_to_path := {}
-	for path in scripts.keys():
+	for path: String in scripts.keys():
 		var declared := _declared_class_name(path)
 		if not declared.is_empty():
 			class_to_path[declared] = path
 
 	var caused_by := {}
-	for path in broken:
+	for path: String in broken:
 		var base := _declared_base(path)
 		if base.is_empty():
 			continue
@@ -127,7 +113,7 @@ func _report_load_failures(broken: Array, scripts: Dictionary) -> Array:
 		dependents[root] = dependents.get(root, 0) + 1
 
 	var issues: Array = []
-	for path in broken:
+	for path: String in broken:
 		if caused_by.has(path):
 			continue
 		var message := "Script fails to compile (see the parse error above)"
@@ -138,154 +124,144 @@ func _report_load_failures(broken: Array, scripts: Dictionary) -> Array:
 	return issues
 
 
-func _check_file(path: String, script: Script) -> Array:
+func _check_file(index: GDLintSourceIndex, path: String, script: Script) -> Array:
 	# Only the script's OWN methods count here: ClassDB reports these hooks as
 	# virtuals on Object, so testing the merged member set would skip everything.
 	for method in script.get_script_method_list():
 		if DYNAMIC_PROPERTY_HOOKS.has(method.name):
 			return []
 
-	var lines := _read_lines(path)
-	if lines.is_empty():
+	var entry := index.file_records(path)
+	if entry.is_empty() or entry.get("parse_error", false):
 		return []
 
 	if _respect_ignores:
-		_ignore_handler.initialize(lines)
-
-	# `self` followed by one or more .name segments.
-	var chain_regex := RegEx.new()
-	chain_regex.compile("\\bself((?:\\.[A-Za-z_][A-Za-z0-9_]*)+)")
-
-	# A chain written without the `self.` prefix: `critters.any_enemy_walking`.
-	# Only followed up when the root identifier is a member of this script and is
-	# not shadowed anywhere by a local, parameter or loop variable.
-	var bare_chain_regex := RegEx.new()
-	bare_chain_regex.compile("(?<![.\\w])([A-Za-z_][A-Za-z0-9_]*)((?:\\.[A-Za-z_][A-Za-z0-9_]*)+)")
-	var shadowed_by_line := _collect_shadowed_names(lines)
-
-	# `if predicate:` -- a lone identifier in a truth test, not called, not dotted.
-	var bare_condition_regex := RegEx.new()
-	bare_condition_regex.compile(
-		"(?:^|[\\s(])(?:if|elif|while|and|or|not)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?![\\w.(])")
+		_ignore_handler.initialize(_read_lines(path))
 
 	var root := _members_of_script(script)
 	var root_label := _script_label(path, script)
+	var locals := _locals_by_scope(entry)
 
 	var issues: Array = []
-	var in_block_string := false
-	for i in range(lines.size()):
-		var line: String = lines[i]
+	for chain: Dictionary in entry.member_chains:
+		var issue = _check_chain(path, chain, root, root_label, locals)
+		if issue != null:
+			issues.append(issue)
 
-		# Triple-quoted blocks would otherwise hand us matches out of prose.
-		var fence_count := line.count("\"\"\"")
-		if in_block_string:
-			if fence_count > 0:
-				in_block_string = false
+	# `if predicate:` -- a bare method name used as a truth test. The index marks
+	# any expression tested for truthiness, including operands of and/or/not.
+	for reference: Dictionary in entry.references:
+		if String(reference.get("context", "")) != "condition":
 			continue
-		if fence_count % 2 == 1:
-			in_block_string = true
+		if bool(reference.get("is_call", false)):
 			continue
-
-		var code := _strip_strings_and_comments(line)
-		for found in chain_regex.search_all(code):
-			var segments: PackedStringArray = found.get_string(1).substr(1).split(".")
-			# A '(' right after the chain makes the last segment a call, and the
-			# argument list may run past the end of this line.
-			var is_call := false
-			var argument_count := -1
-			var paren := _next_non_space(code, found.get_end())
-			if paren != -1 and code[paren] == "(":
-				is_call = true
-				argument_count = _count_call_arguments(lines, i, paren)
-			var in_condition := _is_condition_context(code, found.get_start())
-			var issue = _check_chain(path, i + 1, segments, root, root_label,
-				argument_count, is_call, in_condition)
-			if issue != null:
-				issues.append(issue)
-
-		# The same mistake without the `self.` prefix: `if predicate:`. Restricted
-		# to a lone identifier that is a method of this script -- a dotted receiver
-		# has no `self` to resolve it against.
-		for found in bare_condition_regex.search_all(code):
-			var candidate := found.get_string(1)
-			if not root.methods.has(candidate):
-				continue
-			if _respect_ignores and _ignore_handler.should_ignore(i + 1, CHECK_METHOD_NOT_CALLED):
-				continue
-			issues.append(IssueClass.create(
-				path, i + 1, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
-				"'%s' is a method used as a condition without being called; " % candidate
-				+ "the reference is always true (did you mean '%s()'?)" % candidate))
-
-		# The same chains written without `self.`. Everything the qualified form
-		# catches applies here too; the only extra work is proving the root
-		# identifier really is this script's member and not a shadowing local.
-		for found in bare_chain_regex.search_all(code):
-			var head := found.get_string(1)
-			if head == "self" or shadowed_by_line[i].has(head) or not root.names.has(head):
-				continue
-			var segments := PackedStringArray([head])
-			segments.append_array(found.get_string(2).substr(1).split("."))
-
-			var is_call := false
-			var argument_count := -1
-			var paren := _next_non_space(code, found.get_end())
-			if paren != -1 and code[paren] == "(":
-				is_call = true
-				argument_count = _count_call_arguments(lines, i, paren)
-			var in_condition := _is_condition_context(code, found.get_start())
-			var issue = _check_chain(path, i + 1, segments, root, root_label,
-				argument_count, is_call, in_condition)
-			if issue != null:
-				issues.append(issue)
+		var name := String(reference.get("name", ""))
+		if not root.methods.has(name):
+			continue
+		if _is_shadowed(locals, String(reference.get("scope", "")), name):
+			continue
+		var issue = _method_not_called(path, GDLintSourceIndex.line_of(reference), name)
+		if issue != null:
+			issues.append(issue)
 
 	if _respect_ignores:
 		_ignore_handler.clear()
 	return issues
 
 
-# Walk the chain, hopping from one type's member set to the next. Stops silently
-# the moment a type can no longer be resolved -- no resolution, no verdict.
-# argument_count is -1 when the chain is not a call, or when the argument list
-# could not be counted.
-func _check_chain(path: String, line_num: int, segments: PackedStringArray, root: Dictionary, root_label: String, argument_count: int = -1, is_call: bool = false, in_condition: bool = false):
+# Names bound by a local, parameter or loop variable, keyed by the scope they are
+# bound in. A chain rooted in one of these is skipped: the member of that name may
+# not be what the line refers to.
+func _locals_by_scope(entry: Dictionary) -> Dictionary:
+	var locals := {}
+	for declaration: Dictionary in entry.declarations:
+		var kind := String(declaration.get("kind", ""))
+		if kind != "variable" and kind != "parameter" and kind != "constant":
+			continue
+		var scope := String(declaration.get("scope", ""))
+		if scope.is_empty():
+			continue  # a class-level member, not a local
+		if not locals.has(scope):
+			locals[scope] = {}
+		locals[scope][String(declaration.get("name", ""))] = true
+	return locals
+
+
+# True when `name` is bound as a local anywhere up the scope chain. Scopes are
+# dotted, so a name bound in `Inner._ready` also covers records written there.
+func _is_shadowed(locals: Dictionary, scope: String, name: String) -> bool:
+	var current := scope
+	while true:
+		if locals.has(current) and locals[current].has(name):
+			return true
+		var cut := current.rfind(".")
+		if cut == -1:
+			return false
+		current = current.substr(0, cut)
+	return false
+
+
+func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label: String, locals: Dictionary):
+	var segments: Array = chain.get("segments", [])
+	if segments.is_empty():
+		return null
+
+	var line := GDLintSourceIndex.line_of(chain)
+	var scope := String(chain.get("scope", ""))
+	var in_condition := String(chain.get("context", "")) == "condition"
+
+	# Stop where hop-by-hop resolution stops being valid. `self.get_thing().field`
+	# says nothing about the call's return type, and `$Clock.text` is not a member
+	# of the enclosing script.
+	var names: Array = []
+	var last_is_call := false
+	for segment: Dictionary in segments:
+		var kind := String(segment.get("kind", ""))
+		if kind != "self" and kind != "identifier" and kind != "call":
+			break
+		names.append(String(segment.get("name", "")))
+		last_is_call = kind == "call"
+		if kind == "call":
+			break  # the return type is unknown; nothing past this resolves
+
+	if names.is_empty():
+		return null
+
+	var start := 0
+	if names[0] == "self":
+		start = 1
+	elif _is_shadowed(locals, scope, names[0]) or not root.names.has(names[0]):
+		return null  # a local, or not ours to resolve
+
 	var current := root
 	var owner_label := root_label
-	var last := segments.size() - 1
+	var last := names.size() - 1
 
-	for index in range(segments.size()):
-		var segment := segments[index]
+	for index in range(start, names.size()):
+		var name: String = names[index]
 
-		if not current.names.has(segment):
-			if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_UNKNOWN_MEMBER):
+		if not current.names.has(name):
+			if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNKNOWN_MEMBER):
 				return null
-			var message := "'%s' is not a member of %s" % [segment, owner_label]
-			var suggestion := _closest_member(segment, current.names)
+			var message := "'%s' is not a member of %s" % [name, owner_label]
+			var suggestion := _closest_member(name, current.names)
 			if not suggestion.is_empty():
 				message += " (did you mean '%s'?)" % suggestion
 			return IssueClass.create(
-				path, line_num, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_MEMBER, message)
+				path, line, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_MEMBER, message)
 
 		# A method used as a condition without being called. The reference is a
-		# Callable, which is always truthy, so the branch never actually branches.
-		if index == last and not is_call and in_condition and current.methods.has(segment):
-			if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_METHOD_NOT_CALLED):
-				return null
-			return IssueClass.create(
-				path, line_num, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
-				"'%s' is a method used as a condition without being called; " % segment
-				+ "the reference is always true (did you mean '%s()'?)" % segment)
+		# Callable, which is always truthy, so the branch never branches.
+		if index == last and in_condition and not last_is_call and current.methods.has(name):
+			return _method_not_called(path, line, name)
 
-		# <signal>.emit(...) -- checked here because a signal has no type to step
-		# into, so the walk would otherwise stop before reaching .emit.
-		if index == last - 1 and argument_count >= 0 \
-				and segments[last] == "emit" and current.signals.has(segment):
-			return _check_signal_arity(path, line_num, segment, argument_count,
-				current.signals[segment])
+		# <signal>.emit(...) -- a signal has no type to step into, so the walk
+		# would otherwise stop before reaching .emit.
+		if index == last - 1 and names[last] == "emit" and current.signals.has(name):
+			var given: int = chain.get("arguments", []).size()
+			return _check_signal_arity(path, line, name, given, current.signals[name])
 
-		# Only object-typed properties carry a class we can step into. Methods,
-		# signals, constants and built-in types end the walk.
-		var next_class: String = current.types.get(segment, "")
+		var next_class: String = current.types.get(name, "")
 		if next_class.is_empty():
 			return null
 		var next := _members_of_class(next_class)
@@ -297,125 +273,24 @@ func _check_chain(path: String, line_num: int, segments: PackedStringArray, root
 	return null
 
 
-# Signals have no default arguments, so the expected count is exact.
-func _check_signal_arity(path: String, line_num: int, signal_name: String, given: int, expected: int):
-	if given == expected:
-		return null
-	if _respect_ignores and _ignore_handler.should_ignore(line_num, CHECK_ARGUMENT_COUNT):
+func _method_not_called(path: String, line: int, name: String):
+	if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_METHOD_NOT_CALLED):
 		return null
 	return IssueClass.create(
-		path, line_num, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
+		path, line, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
+		"'%s' is a method used as a condition without being called; " % name
+		+ "the reference is always true (did you mean '%s()'?)" % name)
+
+
+# Signals have no default arguments, so the expected count is exact.
+func _check_signal_arity(path: String, line: int, signal_name: String, given: int, expected: int):
+	if given == expected:
+		return null
+	if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_ARGUMENT_COUNT):
+		return null
+	return IssueClass.create(
+		path, line, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
 		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected])
-
-
-# For each line, the names bound by a local, parameter or loop variable in the
-# function that line belongs to. A bare chain rooted in one of those is skipped:
-# the script member of the same name may not be what the line refers to.
-#
-# Scoped per function rather than per file on purpose. A file-wide set means one
-# `var result` in any function switches the check off for `result` everywhere,
-# which fails silently and gets worse the more common the name is.
-func _collect_shadowed_names(lines: Array) -> Array:
-	var func_start := RegEx.new()
-	func_start.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\((.*)\\)")
-	var local_var := RegEx.new()
-	local_var.compile("^[\\t ]+var\\s+([A-Za-z_][A-Za-z0-9_]*)")
-	var loop_var := RegEx.new()
-	loop_var.compile("^\\s*for\\s+([A-Za-z_][A-Za-z0-9_]*)")
-	var param_name := RegEx.new()
-	param_name.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)")
-
-	# Pass 1: which function each line belongs to, and where each one starts.
-	var owner := []
-	var starts := []
-	var current := -1
-	for i in range(lines.size()):
-		if func_start.search(String(lines[i])) != null:
-			current = starts.size()
-			starts.append(i)
-		owner.append(current)
-
-	# Pass 2: gather each function's bound names, applied to the whole function so
-	# a local declared halfway down still covers the lines above it.
-	var scopes := []
-	for _i in range(starts.size()):
-		scopes.append({})
-	for i in range(lines.size()):
-		if owner[i] == -1:
-			continue
-		var scope: Dictionary = scopes[owner[i]]
-		var text := String(lines[i])
-
-		var found := func_start.search(text)
-		if found != null:
-			for part in found.get_string(1).split(","):
-				var name_match := param_name.search(part)
-				if name_match != null:
-					scope[name_match.get_string(1)] = true
-		found = local_var.search(text)
-		if found != null:
-			scope[found.get_string(1)] = true
-		found = loop_var.search(text)
-		if found != null:
-			scope[found.get_string(1)] = true
-
-	var by_line := []
-	for i in range(lines.size()):
-		by_line.append(scopes[owner[i]] if owner[i] != -1 else {})
-	return by_line
-
-
-# True when what precedes the match makes it a truth test: if/elif/while, a
-# boolean operator, or assert(. Those are the places where a Callable silently
-# evaluates to true instead of failing.
-func _is_condition_context(code: String, match_start: int) -> bool:
-	var before := code.substr(0, match_start)
-	var keyword := RegEx.new()
-	keyword.compile("(?:^|[\\s(])(if|elif|while|and|or|not)\\s+$")
-	if keyword.search(before) != null:
-		return true
-	return before.strip_edges(false, true).ends_with("assert(")
-
-
-func _next_non_space(text: String, from: int) -> int:
-	for i in range(from, text.length()):
-		if text[i] != " " and text[i] != "\t":
-			return i
-	return -1
-
-
-# Counts top-level commas between the matching parentheses, following the call
-# across lines when it wraps. Returns -1 when the list cannot be delimited, so an
-# unbalanced or over-long call yields no verdict rather than a wrong one.
-func _count_call_arguments(lines: Array, start_line: int, paren_index: int) -> int:
-	var depth := 0
-	var commas := 0
-	var has_content := false
-	var limit: int = mini(lines.size(), start_line + MAX_CALL_LINES)
-
-	for i in range(start_line, limit):
-		# Strings and comments are removed so their commas and brackets never count.
-		var code := _strip_strings_and_comments(String(lines[i]))
-		var start := paren_index if i == start_line else 0
-		if start >= code.length():
-			continue
-
-		for j in range(start, code.length()):
-			var ch := code[j]
-			match ch:
-				"(", "[", "{":
-					depth += 1
-				")", "]", "}":
-					depth -= 1
-					if depth == 0:
-						return commas + 1 if has_content else 0
-				",":
-					if depth == 1:
-						commas += 1
-				_:
-					if depth >= 1 and ch != " " and ch != "\t":
-						has_content = true
-	return -1
 
 
 # Members of a loaded script: its own plus, already merged by the engine, those
@@ -514,40 +389,13 @@ func _closest_member(name: String, names: Dictionary) -> String:
 	return best
 
 
-func _strip_strings_and_comments(line: String) -> String:
-	var result := line
-
-	var dq := RegEx.new()
-	dq.compile("\"[^\"]*\"")
-	result = dq.sub(result, "\"\"", true)
-
-	var sq := RegEx.new()
-	sq.compile("'[^']*'")
-	result = sq.sub(result, "''", true)
-
-	# With the strings gone a '#' can only start a comment.
-	var comment := result.find("#")
-	if comment >= 0:
-		result = result.substr(0, comment)
-
-	return result
-
-
-func _read_lines(path: String) -> Array:
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		return []
-	var content := file.get_as_text()
-	file.close()
-	return Array(content.split("\n"))
-
-
-# Both of these tolerate leading annotations, and `extends` is matched anywhere on
-# the line: `@icon("...") class_name Foo extends Node` is one valid line, and so is
-# `class_name Foo extends Node`, where `extends` never starts the line.
+# The only text scanning left here. Used solely on scripts that failed to load,
+# to fold cascading failures into their root cause. A script that does not
+# compile has no base script to ask the engine for, and the index does not yet
+# name the base on a class declaration (requirement 7 in the formatter spec).
 func _declared_class_name(path: String) -> String:
 	var declaration := RegEx.new()
-	declaration.compile("^\\s*" + ANNOTATIONS + "class_name\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	declaration.compile("^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*class_name\\s+([A-Za-z_][A-Za-z0-9_]*)")
 	for line in _read_lines(path):
 		var found := declaration.search(String(line))
 		if found != null:
@@ -570,3 +418,12 @@ func _script_label(path: String, script: Script) -> String:
 	if not String(global_name).is_empty():
 		return String(global_name)
 	return path.get_file()
+
+
+func _read_lines(path: String) -> Array:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return []
+	var content := file.get_as_text()
+	file.close()
+	return Array(content.split("\n"))

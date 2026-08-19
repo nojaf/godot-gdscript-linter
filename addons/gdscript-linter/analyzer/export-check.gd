@@ -18,35 +18,37 @@ extends RefCounted
 ##
 ## Built-in types are never reported: `@export var hp: int` is 0, not null.
 ##
-## Requires the project to have been imported -- exports are read from the engine,
-## not from the text, so `@export_range`, setters and the rest need no parsing.
+## The engine says which properties are exported and which can hold null.
+## GDLintSourceIndex says where each is declared, whether it opts out with
+## `= null`, and which names something null-tests, in which scope.
 
 const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_UNGUARDED_EXPORT := "unguarded-export"
 
-## GDScript allows annotations before a declaration on the same line:
-##     @abstract func may_target(candidate: Critter) -> bool
-## A pattern anchored at `func` misses those, and the miss is silent rather than
-## noisy: the declaration never registers, while its text still counts as an
-## occurrence that keeps the implementation looking alive.
-const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
+## Where a Node's guard has to live. Exports are populated as the node enters the
+## tree, so these are the callbacks that actually run with them set. A guard in a
+## helper nobody calls protects nothing.
+const LIFECYCLE_CALLBACKS := ["_ready", "_enter_tree"]
+
+## Calls whose argument being an export counts as having checked it.
+const GUARD_CALLS := ["assert", "is_instance_valid"]
 
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
 
 ## Run over the given res:// script paths, returning an Array of Issue.
-func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
+func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = true) -> Array:
 	_respect_ignores = p_respect_ignores
 
 	var issues: Array = []
 	for path: String in file_paths:
-		issues.append_array(_check_file(path))
+		issues.append_array(_check_file(index, path))
 	return issues
 
 
-func _check_file(path: String) -> Array:
+func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 	var script: Script = load(path) as Script
 	# A script that does not compile reports nothing here; --check-members
 	# already flags it, and its property list would be empty anyway.
@@ -57,38 +59,35 @@ func _check_file(path: String) -> Array:
 	if exports.is_empty():
 		return []
 
-	var lines := _read_lines(path)
-	if lines.is_empty():
+	var entry := index.file_records(path)
+	if entry.is_empty() or entry.get("parse_error", false):
 		return []
 
 	if _respect_ignores:
-		_ignore_handler.initialize(lines)
+		_ignore_handler.initialize(_read_lines(path))
 
-	# Where the guard has to live depends on what the script is. A Node gets its
-	# exports populated as it enters the tree, so _ready/_enter_tree is the place
-	# that actually runs with them set; a guard parked in a helper nobody calls
-	# protects nothing. A Resource has neither callback, so it is accepted anywhere.
-	var native := script.get_instance_base_type()
-	var scopes: Array = []
-	if ClassDB.is_parent_class(native, "Node"):
-		scopes = _lifecycle_ranges(lines)
-
-	var guarded := _guarded_names(lines, scopes)
+	# A Node's guard must be in a lifecycle callback. A Resource has neither, so
+	# any scope counts for one. The distinction comes from the engine rather than
+	# from reading the extends line.
+	var restrict_to_lifecycle := ClassDB.is_parent_class(script.get_instance_base_type(), "Node")
+	var guarded := _guarded_names(entry, restrict_to_lifecycle)
 
 	var issues: Array = []
 	for name: String in exports:
-		var declaration := _find_declaration(lines, name)
-		if declaration.line == -1:
+		var declaration := _find_declaration(entry, name)
+		if declaration.is_empty():
 			continue  # cannot point at it; say nothing
-		if declaration.optional:
+		if String(declaration.get("default", "")) == "null":
 			continue  # `= null` declares it optional on purpose
 		if guarded.has(name):
 			continue
-		if _respect_ignores and _ignore_handler.should_ignore(declaration.line, CHECK_UNGUARDED_EXPORT):
+
+		var line := GDLintSourceIndex.line_of(declaration)
+		if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNGUARDED_EXPORT):
 			continue
 
 		issues.append(IssueClass.create(
-			path, declaration.line, IssueClass.Severity.CRITICAL, CHECK_UNGUARDED_EXPORT,
+			path, line, IssueClass.Severity.CRITICAL, CHECK_UNGUARDED_EXPORT,
 			"Export '%s' is never null-guarded; " % name
 			+ "add assert(%s != null, \"...\") or declare it optional with '= null'" % name))
 
@@ -113,115 +112,83 @@ func _object_exports(script: Script) -> Array:
 	return names
 
 
-# The declaration's line, and whether it opts out with `= null`. The engine knows
-# the property exists but not where it was written or what it defaults to.
-func _find_declaration(lines: Array, name: String) -> Dictionary:
-	var declaration := RegEx.new()
-	declaration.compile("^\\s*(?:@export\\w*(?:\\s*\\([^)]*\\))?\\s+)?var\\s+" + name + "\\b(.*)$")
-
-	var null_default := RegEx.new()
-	null_default.compile("=\\s*null\\b")
-
-	for i in range(lines.size()):
-		# The comment has to go first: a trailing note that merely mentions
-		# `= null` would otherwise read as the declaration opting out.
-		var code := _strip_comment(String(lines[i]))
-		var found := declaration.search(code)
-		if found == null:
+# The class-level declaration of `name`. Scope tells a member apart from a local
+# of the same name, which reading lines could not do.
+func _find_declaration(entry: Dictionary, name: String) -> Dictionary:
+	for declaration: Dictionary in entry.declarations:
+		if String(declaration.get("kind", "")) != "variable":
 			continue
-		return {"line": i + 1, "optional": null_default.search(found.get_string(1)) != null}
-
-	return {"line": -1, "optional": false}
-
-
-# Cuts the line at its first unquoted '#'.
-func _strip_comment(line: String) -> String:
-	var quote := ""
-	for i in range(line.length()):
-		var ch := line[i]
-		if quote.is_empty():
-			if ch == "\"" or ch == "'":
-				quote = ch
-			elif ch == "#":
-				return line.substr(0, i)
-		elif ch == quote:
-			quote = ""
-	return line
+		if not String(declaration.get("scope", "")).is_empty():
+			continue  # a local, not the export
+		if String(declaration.get("name", "")) == name:
+			return declaration
+	return {}
 
 
-# Names that something actually null-tests, anywhere in the file.
+# Names that something actually null-tests.
 #
-# Matching the TEST rather than "appears near an assert" matters: a condition that
-# merely mentions the name -- `if self.critters.any_enemy_walking:` -- is not a
-# guard, and counting it silently excuses the export forever.
-#
-# Working line by line also handles asserts that wrap, since each line of a
-# compound condition carries its own `x != null` term.
-const GUARD_PATTERNS := [
-	"(?:self\\.)?([A-Za-z_][A-Za-z0-9_]*)\\s*(?:==|!=)\\s*null",   # x != null
-	"null\\s*(?:==|!=)\\s*(?:self\\.)?([A-Za-z_][A-Za-z0-9_]*)",   # null != x
-	"is_instance_valid\\(\\s*(?:self\\.)?([A-Za-z_][A-Za-z0-9_]*)\\s*\\)",
-	"^\\s*(?:el)?if\\s+(?:not\\s+)?(?:self\\.)?([A-Za-z_][A-Za-z0-9_]*)\\s*:",  # if x: / if not x:
-	"\\bassert\\(\\s*(?:not\\s+)?(?:self\\.)?([A-Za-z_][A-Za-z0-9_]*)\\s*[,)]", # assert(x, ...)
-]
-
-
-# scopes limits which lines may contain a guard, as [start, end) pairs. Empty
-# means the whole file counts.
-func _guarded_names(lines: Array, scopes: Array) -> Dictionary:
-	var matchers: Array = []
-	for pattern in GUARD_PATTERNS:
-		var regex := RegEx.new()
-		regex.compile(pattern)
-		matchers.append(regex)
-
+# Matching the TEST rather than a mention matters: `if self.critters.any_walking:`
+# names `critters` without checking it, and counting that would excuse the export
+# forever. Comparisons come from the index, so the shapes below are the only
+# policy left here.
+func _guarded_names(entry: Dictionary, restrict_to_lifecycle: bool) -> Dictionary:
 	var guarded := {}
-	for i in range(lines.size()):
-		if not scopes.is_empty() and not _within(i, scopes):
+
+	for comparison: Dictionary in entry.comparisons:
+		if restrict_to_lifecycle and not _in_lifecycle(String(comparison.get("scope", ""))):
 			continue
-		var code := _strip_comment(String(lines[i]))
-		for matcher: RegEx in matchers:
-			for found in matcher.search_all(code):
-				guarded[found.get_string(1)] = true
+		var operator := String(comparison.get("operator", ""))
+		if operator != "==" and operator != "!=":
+			continue
+		var left := _bare_name(String(comparison.get("left", {}).get("text", "")))
+		var right := _bare_name(String(comparison.get("right", {}).get("text", "")))
+		if right == "null" and not left.is_empty():
+			guarded[left] = true
+		elif left == "null" and not right.is_empty():
+			guarded[right] = true
+
+	# assert(x) and is_instance_valid(x), plus `if x:` and `if not x:`.
+	for reference: Dictionary in entry.references:
+		if restrict_to_lifecycle and not _in_lifecycle(String(reference.get("scope", ""))):
+			continue
+		var name := String(reference.get("name", ""))
+
+		if bool(reference.get("is_call", false)) and GUARD_CALLS.has(name):
+			for argument: Dictionary in reference.get("arguments", []):
+				var bare := _bare_name(String(argument.get("text", "")))
+				if not bare.is_empty():
+					guarded[bare] = true
+			continue
+
+		if String(reference.get("context", "")) == "condition":
+			guarded[name] = true
+
+	for chain: Dictionary in entry.member_chains:
+		if restrict_to_lifecycle and not _in_lifecycle(String(chain.get("scope", ""))):
+			continue
+		if String(chain.get("context", "")) != "condition":
+			continue
+		# Only `if self.thing:` guards `thing`. `if self.thing.walking:` does not.
+		var names := GDLintSourceIndex.resolvable_segments(chain)
+		if names.size() == 2 and names[0] == "self":
+			guarded[names[1]] = true
+
 	return guarded
 
 
-func _within(index: int, scopes: Array) -> bool:
-	for scope in scopes:
-		if index >= scope[0] and index < scope[1]:
-			return true
-	return false
+func _in_lifecycle(scope: String) -> bool:
+	return LIFECYCLE_CALLBACKS.has(scope)
 
 
-# Line ranges of _ready and _enter_tree. A body runs to the next function or to
-# the next class-level statement.
-func _lifecycle_ranges(lines: Array) -> Array:
-	var any_func := RegEx.new()
-	any_func.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)")
-
-	var ranges: Array = []
-	var open_from := -1
-	for i in range(lines.size()):
-		var text := String(lines[i])
-		var found := any_func.search(text)
-
-		if found != null:
-			if open_from != -1:
-				ranges.append([open_from, i])
-				open_from = -1
-			var name := found.get_string(1)
-			if name == "_ready" or name == "_enter_tree":
-				open_from = i
-			continue
-
-		# A non-indented statement ends the body just as a new function does.
-		if open_from != -1 and not text.strip_edges().is_empty() and text == text.strip_edges(true, false):
-			ranges.append([open_from, i])
-			open_from = -1
-
-	if open_from != -1:
-		ranges.append([open_from, lines.size()])
-	return ranges
+# `self.critters` and `critters` both name the same export. Anything more
+# complicated is not a plain reference to it.
+func _bare_name(text: String) -> String:
+	var trimmed := text.strip_edges()
+	if trimmed.begins_with("self."):
+		trimmed = trimmed.substr(5)
+	if trimmed.is_valid_identifier():
+		return trimmed
+	return ""
 
 
 func _read_lines(path: String) -> Array:
