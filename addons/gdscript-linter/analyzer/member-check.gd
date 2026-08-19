@@ -36,6 +36,13 @@ const CHECK_UNKNOWN_MEMBER := "unknown-member"
 const CHECK_ARGUMENT_COUNT := "wrong-argument-count"
 const CHECK_METHOD_NOT_CALLED := "method-not-called"
 
+## GDScript allows annotations before a declaration on the same line:
+##     @abstract func may_target(candidate: Critter) -> bool
+## A pattern anchored at `func` misses those, and the miss is silent rather than
+## noisy: the declaration never registers, while its text still counts as an
+## occurrence that keeps the implementation looking alive.
+const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
+
 ## How far a call's argument list may span before we give up counting it.
 const MAX_CALL_LINES := 60
 
@@ -310,7 +317,7 @@ func _check_signal_arity(path: String, line_num: int, signal_name: String, given
 # which fails silently and gets worse the more common the name is.
 func _collect_shadowed_names(lines: Array) -> Array:
 	var func_start := RegEx.new()
-	func_start.compile("^\\s*(?:static\\s+)?func\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\((.*)\\)")
+	func_start.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\((.*)\\)")
 	var local_var := RegEx.new()
 	local_var.compile("^[\\t ]+var\\s+([A-Za-z_][A-Za-z0-9_]*)")
 	var loop_var := RegEx.new()

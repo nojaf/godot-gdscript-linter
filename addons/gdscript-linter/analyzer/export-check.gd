@@ -25,6 +25,13 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_UNGUARDED_EXPORT := "unguarded-export"
 
+## GDScript allows annotations before a declaration on the same line:
+##     @abstract func may_target(candidate: Critter) -> bool
+## A pattern anchored at `func` misses those, and the miss is silent rather than
+## noisy: the declaration never registers, while its text still counts as an
+## occurrence that keeps the implementation looking alive.
+const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
+
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
@@ -190,7 +197,7 @@ func _within(index: int, scopes: Array) -> bool:
 # the next class-level statement.
 func _lifecycle_ranges(lines: Array) -> Array:
 	var any_func := RegEx.new()
-	any_func.compile("^\\s*(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)")
+	any_func.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)")
 
 	var ranges: Array = []
 	var open_from := -1

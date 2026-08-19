@@ -183,6 +183,16 @@ excluded unless an addon is what is being analyzed. Addon text otherwise masks d
 code in the project under analysis: this addon's own source contains about 80
 standalone `all` tokens, which was enough to hide a genuinely dead `all()`.
 
+Declarations are matched with any annotations in front of them. `@abstract func
+may_target(...)` on one line has to register, and a pattern anchored at `func`
+misses it silently: the declaration never counts, while its text still counts as a
+reference that keeps every implementation looking alive. Adding `@abstract` to a
+project would otherwise make those methods permanently exempt.
+
+A name declared in several places is reported once, at the first declaration, with
+the number of sites. An `@abstract` declaration plus its implementations is one
+dead contract, not one warning per file.
+
 Two things are never reported. Engine virtuals are identified by asking `ClassDB`
 what the native base class declares. Placeholder bodies containing only `pass` are
 left to the existing `empty-function` check.

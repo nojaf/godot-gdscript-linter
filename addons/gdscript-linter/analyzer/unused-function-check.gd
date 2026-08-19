@@ -23,6 +23,13 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 
 const CHECK_UNUSED_FUNCTION := "unused-function"
 
+## GDScript allows annotations before a declaration on the same line:
+##     @abstract func may_target(candidate: Critter) -> bool
+## A pattern anchored at `func` misses those, and the miss is silent rather than
+## noisy: the declaration never registers, while its text still counts as an
+## occurrence that keeps the implementation looking alive.
+const ANNOTATIONS := "(?:@\\w+(?:\\([^)]*\\))?\\s+)*"
+
 ## Text files searched for references. Scene and resource files matter because
 ## Godot itself calls methods by name from data rather than from code:
 ##   .tscn  [connection ... method="_on_button_pressed"]
@@ -66,9 +73,40 @@ func run(file_paths: Array, p_respect_ignores: bool = true) -> Array:
 
 	_index_project(include_addons)
 
-	var issues: Array = []
+	# Collect first, report second. A name declared in several places -- a base
+	# plus its overrides, or an @abstract declaration plus its implementations --
+	# is one dead contract, not one problem per site.
+	var candidates: Array = []
 	for path in file_paths:
-		issues.append_array(_check_file(path))
+		candidates.append_array(_check_file(path))
+	return _group_by_name(candidates)
+
+
+# One issue per unreferenced name, at its first declaration in path order. The
+# message carries the number of sites so the others are not a surprise.
+func _group_by_name(candidates: Array) -> Array:
+	var by_name := {}
+	for candidate in candidates:
+		var name: String = candidate.name
+		if not by_name.has(name):
+			by_name[name] = []
+		by_name[name].append(candidate)
+
+	var issues: Array = []
+	for name: String in by_name.keys():
+		var sites: Array = by_name[name]
+		sites.sort_custom(func(a, b):
+			if a.path == b.path:
+				return a.line < b.line
+			return a.path < b.path)
+
+		var first: Dictionary = sites[0]
+		var message := "Function '%s' is never referenced in the project" % name
+		if sites.size() > 1:
+			message += " (declared in %d places)" % sites.size()
+		issues.append(IssueClass.create(
+			first.path, first.line, IssueClass.Severity.WARNING,
+			CHECK_UNUSED_FUNCTION, message))
 	return issues
 
 
@@ -108,6 +146,7 @@ func _index_project(include_addons: bool) -> void:
 			_token_counts[token] = _token_counts.get(token, 0) + 1
 
 
+# Returns candidate declarations, not issues: grouping happens in run().
 func _check_file(path: String) -> Array:
 	var script: Script = load(path) as Script
 	# Without a compiled script the native base is unknown, so engine virtuals
@@ -124,7 +163,7 @@ func _check_file(path: String) -> Array:
 	if _respect_ignores:
 		_ignore_handler.initialize(lines)
 
-	var issues: Array = []
+	var candidates: Array = []
 	for declaration in _find_declarations(lines):
 		var name: String = declaration.name
 
@@ -137,13 +176,11 @@ func _check_file(path: String) -> Array:
 		if _respect_ignores and _ignore_handler.should_ignore(declaration.line, CHECK_UNUSED_FUNCTION):
 			continue
 
-		issues.append(IssueClass.create(
-			path, declaration.line, IssueClass.Severity.WARNING, CHECK_UNUSED_FUNCTION,
-			"Function '%s' is never referenced in the project" % name))
+		candidates.append({"name": name, "path": path, "line": declaration.line})
 
 	if _respect_ignores:
 		_ignore_handler.clear()
-	return issues
+	return candidates
 
 
 # Every declaration contributes one occurrence of its own name, and mentions
@@ -158,7 +195,7 @@ func _is_referenced(name: String, self_occurrences: int) -> bool:
 
 func _find_declarations(lines: Array) -> Array:
 	var func_regex := RegEx.new()
-	func_regex.compile("^\\s*(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+	func_regex.compile("^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
 
 	var declarations: Array = []
 	for i in range(lines.size()):
@@ -218,7 +255,7 @@ func _is_placeholder_body(lines: Array, declaration_index: int) -> bool:
 
 func _count_declarations(text: String) -> void:
 	var func_regex := RegEx.new()
-	func_regex.compile("(?m)^\\s*(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+	func_regex.compile("(?m)^\\s*" + ANNOTATIONS + "(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
 	for found in func_regex.search_all(text):
 		var name := found.get_string(1)
 		_declaration_counts[name] = _declaration_counts.get(name, 0) + 1
