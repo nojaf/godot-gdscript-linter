@@ -542,19 +542,26 @@ func _read_lines(path: String) -> Array:
 	return Array(content.split("\n"))
 
 
+# Both of these tolerate leading annotations, and `extends` is matched anywhere on
+# the line: `@icon("...") class_name Foo extends Node` is one valid line, and so is
+# `class_name Foo extends Node`, where `extends` never starts the line.
 func _declared_class_name(path: String) -> String:
+	var declaration := RegEx.new()
+	declaration.compile("^\\s*" + ANNOTATIONS + "class_name\\s+([A-Za-z_][A-Za-z0-9_]*)")
 	for line in _read_lines(path):
-		var trimmed: String = String(line).strip_edges()
-		if trimmed.begins_with("class_name "):
-			return trimmed.substr("class_name ".length()).strip_edges().split(" ")[0]
+		var found := declaration.search(String(line))
+		if found != null:
+			return found.get_string(1)
 	return ""
 
 
 func _declared_base(path: String) -> String:
+	var declaration := RegEx.new()
+	declaration.compile("(?:^|\\s)extends\\s+(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_.]*)")
 	for line in _read_lines(path):
-		var trimmed: String = String(line).strip_edges()
-		if trimmed.begins_with("extends "):
-			return trimmed.substr("extends ".length()).strip_edges().replace("\"", "")
+		var found := declaration.search(String(line))
+		if found != null:
+			return found.get_string(1).replace("\"", "")
 	return ""
 
 
