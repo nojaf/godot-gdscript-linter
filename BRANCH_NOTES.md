@@ -370,6 +370,42 @@ deleted two real asserts, and confirmed both reappeared as findings. For a check
 that reads type information from the engine, "reports nothing" and "is broken"
 produce identical output, so both directions have to be proven.
 
+## Open items
+
+Nothing here is blocking. Ordered by how ready each is to pick up.
+
+1. **Drop the last two regular expressions in `member-check.gd`.**
+   `_declared_class_name` and `_declared_base` fold cascading load failures into
+   their root cause. The index answers both now, and it parses scripts Godot
+   cannot compile, which is exactly when they are needed. First carry the `file`
+   record's `extends` into the per-file entry: `GDLintSourceIndex._start_file`
+   keeps only `path`, `parse_error` and the record buckets, so it currently
+   discards it.
+
+2. **Add the over-suppression detail to upstream issue #15.** The issue reports
+   that `gdlint:ignore-function` fails to bind above an annotated or `static`
+   function. What was found afterwards is worse: the directive's range runs past
+   the unrecognised declaration to the next plain `func`, so it suppresses a
+   function it does not name. A fixture with three directives and four print
+   statements reported none of them, including the one no directive covered. That
+   is a stronger case than what was filed and belongs in a comment.
+
+3. **Decide the upstream story for the three checks.** They now depend on the
+   `gdscript-formatter` binary, which this project should not carry. Offering any
+   of them means restoring a text implementation, which reintroduces the bugs
+   listed above, or upstream accepting the dependency. `GDLintDeclarationSyntax`
+   is unaffected and can be offered on its own.
+
+4. **The editor dock still does not know about any of this.** All three checks are
+   CLI-only, by choice, because this project is developed from an external editor.
+   Anyone wanting them in the dock has that work ahead.
+
+5. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
+   producer keeps it there across incompatible changes on purpose. Recheck after
+   every formatter change rather than trusting the guard: assert the fields the
+   checks read, diff findings against a saved baseline, confirm stderr has no
+   `SCRIPT ERROR`.
+
 ## What I would like
 
 I am not asking for a merge of this branch. If any of the checks look worth having, I will open one pull request per check
