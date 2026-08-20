@@ -38,7 +38,7 @@ func _collect_declarations(lines: Array) -> void:
 		var line_num := i + 1
 
 		# Track function boundaries
-		if trimmed.begins_with("func "):
+		if GDLintDeclarationSyntax.declares(trimmed, "func") and not GDLintDeclarationSyntax.is_abstract(trimmed):
 			in_function = true
 			current_func_name = _extract_func_name(trimmed)
 
@@ -58,7 +58,7 @@ func _collect_declarations(lines: Array) -> void:
 
 
 func _is_property_with_accessor(trimmed: String, index: int, lines: Array) -> bool:
-	if not trimmed.begins_with("var ") and not trimmed.begins_with("@onready var "):
+	if not GDLintDeclarationSyntax.declares(trimmed, "var"):
 		return false
 	# Single-line property: var count: int: get: return _count
 	var accessor_regex := RegEx.new()
@@ -92,7 +92,7 @@ func _leading_whitespace_count(line: String) -> int:
 
 
 func _extract_func_name(line: String) -> String:
-	var after_func := line.substr(5)  # After "func "
+	var after_func := GDLintDeclarationSyntax.after_keyword(line.strip_edges(), "func")
 	var paren_pos := after_func.find("(")
 	if paren_pos > 0:
 		return after_func.substr(0, paren_pos).strip_edges()

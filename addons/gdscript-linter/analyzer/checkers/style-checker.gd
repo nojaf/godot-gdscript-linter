@@ -75,8 +75,8 @@ func _check_type_hints(trimmed: String, line_num: int) -> Variant:
 
 func _track_metadata(trimmed: String, file_result) -> void:
 	# Track signals
-	if trimmed.begins_with("signal "):
-		var signal_name := trimmed.substr(7).split("(")[0].strip_edges()
+	if GDLintDeclarationSyntax.declares(trimmed, "signal"):
+		var signal_name := GDLintDeclarationSyntax.after_keyword(trimmed, "signal").split("(")[0].strip_edges()
 		file_result.signals_found.append(signal_name)
 
 	# Track dependencies
@@ -97,7 +97,7 @@ func _extract_string_arg(line: String) -> String:
 # Returns issue dictionary or null
 func check_magic_numbers(line: String, line_num: int) -> Variant:
 	# Skip comments, const declarations, and common safe patterns
-	if line.begins_with("#") or line.begins_with("const "):
+	if line.begins_with("#") or GDLintDeclarationSyntax.declares(line, "const"):
 		return null
 	if "enum " in line or "@export" in line:
 		return null
@@ -144,7 +144,7 @@ func check_commented_code(line: String, line_num: int) -> Variant:
 # Returns issue dictionary or null
 func check_variable_type_hints(line: String, line_num: int) -> Variant:
 	# Check for untyped variable declarations
-	if not line.begins_with("var ") and not line.begins_with("\tvar "):
+	if not GDLintDeclarationSyntax.declares(line.strip_edges(), "var"):
 		return null
 
 	# Skip if it has a type annotation
@@ -156,7 +156,7 @@ func check_variable_type_hints(line: String, line_num: int) -> Variant:
 		return null
 
 	# Extract variable name
-	var after_var := line.strip_edges().substr(4)  # After "var "
+	var after_var := GDLintDeclarationSyntax.after_keyword(line.strip_edges(), "var")
 	var var_name := after_var.split("=")[0].split(":")[0].strip_edges()
 
 	return {

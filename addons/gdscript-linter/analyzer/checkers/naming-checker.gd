@@ -46,8 +46,8 @@ func check_line(line: String, line_num: int) -> Array:
 	var trimmed := line.strip_edges()
 
 	# Check class_name
-	if trimmed.begins_with("class_name "):
-		var class_name_val := trimmed.substr(11).split(" ")[0].strip_edges()
+	if GDLintDeclarationSyntax.declares(trimmed, "class_name"):
+		var class_name_val := GDLintDeclarationSyntax.after_keyword(trimmed, "class_name").split(" ")[0].strip_edges()
 		if not is_pascal_case(class_name_val):
 			issues.append({
 				"line": line_num,
@@ -57,8 +57,8 @@ func check_line(line: String, line_num: int) -> Array:
 			})
 
 	# Check signal names
-	if trimmed.begins_with("signal "):
-		var signal_name := trimmed.substr(7).split("(")[0].strip_edges()
+	if GDLintDeclarationSyntax.declares(trimmed, "signal"):
+		var signal_name := GDLintDeclarationSyntax.after_keyword(trimmed, "signal").split("(")[0].strip_edges()
 		if not is_snake_case(signal_name):
 			issues.append({
 				"line": line_num,
@@ -68,8 +68,8 @@ func check_line(line: String, line_num: int) -> Array:
 			})
 
 	# Check const names
-	if trimmed.begins_with("const "):
-		var after_const := trimmed.substr(6).strip_edges()
+	if GDLintDeclarationSyntax.declares(trimmed, "const"):
+		var after_const := GDLintDeclarationSyntax.after_keyword(trimmed, "const").strip_edges()
 		var const_name := after_const.split(":")[0].split("=")[0].strip_edges()
 		if not is_screaming_snake_case(const_name) and not is_pascal_case(const_name):
 			issues.append({
@@ -80,8 +80,8 @@ func check_line(line: String, line_num: int) -> Array:
 			})
 
 	# Check enum names
-	if trimmed.begins_with("enum "):
-		var after_enum := trimmed.substr(5).strip_edges()
+	if GDLintDeclarationSyntax.declares(trimmed, "enum"):
+		var after_enum := GDLintDeclarationSyntax.after_keyword(trimmed, "enum").strip_edges()
 		var enum_name := after_enum.split("{")[0].split(" ")[0].strip_edges()
 		if enum_name != "" and not is_pascal_case(enum_name):
 			issues.append({

@@ -265,8 +265,8 @@ func _scan_for_sealed_classes(file_paths: Array[String]) -> void:
 		for i in range(lines.size() - 1):
 			if lines[i].strip_edges() == "#@Sealed":
 				var next_line := lines[i + 1].strip_edges()
-				if next_line.begins_with("class_name "):
-					var class_name_str := next_line.substr(11).split(" ")[0].strip_edges()
+				if GDLintDeclarationSyntax.declares(next_line, "class_name"):
+					var class_name_str := GDLintDeclarationSyntax.after_keyword(next_line, "class_name").split(" ")[0].strip_edges()
 					_sealed_classes[class_name_str] = file_path
 
 
@@ -285,8 +285,8 @@ func _analyze_file_level(lines: Array, file_path: String, file_result) -> void:
 
 		# Sealed class violation check
 		if config.check_sealed and not _sealed_classes.is_empty():
-			if trimmed.begins_with("extends "):
-				var extends_target := trimmed.substr(8).split(" ")[0].strip_edges()
+			if GDLintDeclarationSyntax.declares(trimmed, "extends"):
+				var extends_target := GDLintDeclarationSyntax.after_keyword(trimmed, "extends").split(" ")[0].strip_edges()
 				if _sealed_classes.has(extends_target):
 					var sealed_file: String = _sealed_classes[extends_target]
 					_add_issue(file_path, line_num, IssueClass.Severity.CRITICAL, "sealed-violation",

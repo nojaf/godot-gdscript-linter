@@ -23,7 +23,7 @@ func analyze_functions(lines: Array, file_result, add_issue_callback: Callable, 
 		var line: String = lines[i]
 		var trimmed := line.strip_edges()
 
-		if trimmed.begins_with("func "):
+		if GDLintDeclarationSyntax.declares(trimmed, "func"):
 			# Finalize previous function
 			if in_function and current_func:
 				_finalize_function(current_func, func_body_lines, file_result, add_issue_callback, add_pinned_issue_callback)
@@ -46,11 +46,12 @@ func _parse_function_signature(line: String, line_num: int) -> Dictionary:
 		"name": "",
 		"line": line_num,
 		"params": 0,
-		"has_return_type": "->" in line
+		"has_return_type": "->" in line,
+		"is_abstract": GDLintDeclarationSyntax.is_abstract(line),
 	}
 
 	# Extract function name
-	var after_func := line.substr(5)  # After "func "
+	var after_func := GDLintDeclarationSyntax.after_keyword(line.strip_edges(), "func")
 	var paren_pos := after_func.find("(")
 	if paren_pos > 0:
 		func_data.name = after_func.substr(0, paren_pos).strip_edges()
@@ -124,6 +125,8 @@ func _check_nesting_depth(func_data: Dictionary, max_nesting: int, add_pinned_ca
 func _check_empty_function(func_data: Dictionary, is_empty: bool, add_issue_callback: Callable) -> void:
 	if not config.check_empty_functions or not is_empty:
 		return
+	if func_data.get("is_abstract", false):
+		return  # an abstract declaration has no body to be empty
 	add_issue_callback.call(func_data.line, "info", "empty-function",
 		"Function '%s' is empty or contains only 'pass'" % func_data.name)
 
