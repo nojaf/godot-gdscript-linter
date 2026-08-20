@@ -33,16 +33,24 @@ a reasonable position. I would rather hear it now than after a pull request.
 
 ## How to try it
 
+The three checks need a second tool. They read source structure from
+`gdscript-formatter index`, a sub-command of a fork of GDQuest's formatter:
+<https://github.com/nojaf/GDScript-formatter/tree/nojaf>. Build that first, then:
+
 ```bash
 git clone -b nojaf https://github.com/nojaf/godot-gdscript-linter
 # copy addons/gdscript-linter/ into a Godot project, then:
+export GDLINT_FORMATTER=/path/to/gdscript-formatter
 godot --headless --path <project> --import
 godot --headless --path <project> --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- \
     --check-members --check-unused-functions --check-exports --clickable
 ```
 
-The `--import` step matters. The checks below read type information from the
-engine, and that requires the project's script class cache to exist.
+The `--import` step matters. The checks read type information from the engine,
+and that requires the project's script class cache to exist.
+
+Without the binary the run stops with exit 3 and says so. It never falls back to
+checking less, because reporting nothing looks exactly like a clean project.
 
 ## What is here
 
@@ -53,10 +61,23 @@ engine, and that requires the project's script class cache to exist.
 | `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Yes |
 | `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Yes |
 | `copy.sh`: install the addon into a project and generate a `lint.sh` wrapper | `9b672f3` | No, local workflow |
+| `GDLintSourceIndex`: take source structure from `gdscript-formatter index` rather than regular expressions | `acfe210`, `7371318` | No, adds a dependency |
+| `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers | `92a5aa3`, `bfcf2fe` | Yes |
 
 Every check is behind its own opt-in flag and off by default. No existing output,
 exit code, config key or dock behavior changes. A user who does not pass the new
 flags sees exactly what they saw before.
+
+**The external binary changes the upstream story.** The three checks were written
+against regular expressions first and later moved onto the index, which removed 26
+regular expressions and fixed several classes of bug. That move also made them
+depend on a Rust binary, which is not something this project should carry. Offering
+any of them upstream means either restoring a text-based implementation, which
+reintroduces the bugs listed above, or upstream accepting the dependency. That
+question is open and worth settling before writing a pull request.
+
+`GDLintDeclarationSyntax` is the exception and stands alone. It fixes existing
+checkers, needs no binary, and matches what was reported in upstream issue #15.
 
 The checks are CLI-only. None of them appear in the editor dock, because I
 develop this project from an external editor and never open the dock. Wiring them
@@ -260,6 +281,31 @@ Recognized forms are `x != null`, `null != x`, `assert(x, ...)`, `if x:`,
 
 ---
 
+## The two-repo split
+
+Structure and meaning come from different places, and keeping that straight is the
+main thing to understand before changing any check.
+
+`gdscript-formatter index` knows where everything is written: declarations with
+their annotations and modifiers, member chains with a `kind` per segment, argument
+lists, string literals with the call they are an argument of, comparisons,
+comments, each with a range and a dotted `scope` such as `Inner._ready`. It knows
+nothing about types.
+
+The Godot engine knows what things mean: every member of a class including
+inherited ones, declared types, signal arity, which exports can hold null, which
+methods are engine virtuals, whether a script compiles. It knows none of it by
+line number.
+
+A check joins the two. `unknown-member` needs the member set from the engine and
+the chain position from the index. Neither half alone is enough, and the half that
+used to be faked with regular expressions is where every bug came from.
+
+Design and open requirements for the index live in the formatter fork at
+`docs/specification_index.md`. Requirement 7, naming the base class on a class
+declaration, is the one still outstanding, and it would remove the last two
+regular expressions in `member-check.gd`.
+
 ## Testing
 
 This repository has no test suite, so I built fixture projects instead. They cover
@@ -268,10 +314,19 @@ script-class types, string-based and editor-wired references, binary resources,
 multi-line argument lists, and the ignore directives. Each check also runs against
 this addon and against a real game project.
 
-Fixtures containing known-bad cases did most of the work. Three separate mistakes
-during this work produced no findings at all while still exiting 0: a stale script
-class cache, a type-inference error in a new checker, and a guard rule that was too
-generous. All three looked exactly like a clean run.
+Fixtures containing known-bad cases did most of the work. Several mistakes during
+this work produced no findings at all while still exiting 0: a stale script class
+cache, a type-inference error in a new checker, a guard rule that was too generous,
+a path-prefix mismatch between `res://foo.gd` and `foo.gd`, and a method name that
+collided with a built-in. All of them looked exactly like a clean run.
+
+**Verify by diffing findings against a saved baseline, and check stderr.** Both
+halves are needed. The name collision threw on every function line, so a checker
+silently collected nothing, and the finding diff still matched its baseline
+because a check that collects nothing produces nothing to differ. The error was
+printed the whole time to the stream the diff was discarding. A verification run
+should assert that stderr contains no `SCRIPT ERROR` as well as comparing
+findings.
 
 For the same reason, one check was verified by mutation: I copied a real project,
 deleted two real asserts, and confirmed both reappeared as findings. For a check
