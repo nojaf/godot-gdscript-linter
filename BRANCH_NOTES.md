@@ -320,9 +320,20 @@ unchanged, a real game project matches its baseline exactly, the addon's
 member-check findings are unchanged at 95, and neither run produces a
 `SCRIPT ERROR`. For this consumer the change was additive.
 
-Requirement 8 was filed as a result: bump `schema` on any incompatible change. The
-consumer's version guard is the only thing between an incompatible producer and a
-silently smaller report, and it cannot fire if the number never moves.
+Requirement 8 was filed as a result and is now settled, as policy rather than as a
+bump. `schema` stays at 1 by decision: the silent-wrong-answer failure needs a
+consumer running an older build, and there is not one, since both sides are
+rebuilt together and neither is in production. The spec records the rule for when
+to bump, the conditions that end the current arrangement, and a table of every
+shape change made under version 1 so an unexpected build can be diagnosed.
+
+**What that means in practice.** The addon's version guard is deliberately inert
+for now. `SUPPORTED_SCHEMA` is 1 and will keep matching across incompatible
+changes, so it cannot be relied on to catch a mismatched build. Until the number
+starts moving, the real safety net is rechecking after every formatter change:
+assert the fields the checks read, diff findings against a saved baseline, and
+confirm stderr is free of `SCRIPT ERROR`. That was done for both requirement 7 and
+requirement 8, and both came back identical.
 
 **The work this unlocks, not yet done.** `member-check.gd` still carries its last
 two regular expressions, `_declared_class_name` and `_declared_base`, used only to
