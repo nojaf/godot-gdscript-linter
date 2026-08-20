@@ -147,16 +147,20 @@ func check_variable_type_hints(line: String, line_num: int) -> Variant:
 	if not GDLintDeclarationSyntax.declares(line.strip_edges(), "var"):
 		return null
 
-	# Skip if it has a type annotation
-	if ":" in line.split("=")[0]:
-		return null
-
 	# Skip @onready and inferred types from literals
 	if "@onready" in line:
 		return null
 
-	# Extract variable name
+	# Everything after `var`, with any annotations and modifiers removed. The raw
+	# line cannot be tested for a type annotation: the colon in
+	# `@export_file("res://x.tscn") var path = ""` belongs to the annotation's
+	# argument, and testing the whole line skips a variable that has no type.
 	var after_var := GDLintDeclarationSyntax.after_keyword(line.strip_edges(), "var")
+
+	# Skip if it has a type annotation
+	if ":" in after_var.split("=")[0]:
+		return null
+
 	var var_name := after_var.split("=")[0].split(":")[0].strip_edges()
 
 	return {

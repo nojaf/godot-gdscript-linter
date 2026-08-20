@@ -107,12 +107,16 @@ func _extract_parameters(line: String, line_num: int, func_name: String) -> void
 	if func_name in virtual_methods:
 		return
 
-	var params_start := line.find("(")
-	var params_end := line.find(")")
+	# Read the list off the declaration with its annotations and modifiers removed.
+	# On the raw line the first parenthesis can belong to an annotation, and
+	# `@rpc("any_peer") func f() -> void:` then yields a parameter named `""`.
+	var declaration := GDLintDeclarationSyntax.after_keyword(line.strip_edges(), "func")
+	var params_start := declaration.find("(")
+	var params_end := declaration.find(")")
 	if params_start < 0 or params_end < 0 or params_end <= params_start:
 		return
 
-	var params_str := line.substr(params_start + 1, params_end - params_start - 1).strip_edges()
+	var params_str := declaration.substr(params_start + 1, params_end - params_start - 1).strip_edges()
 	if params_str.is_empty():
 		return
 

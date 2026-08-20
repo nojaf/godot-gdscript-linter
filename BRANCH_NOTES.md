@@ -281,6 +281,58 @@ Recognized forms are `x != null`, `null != x`, `assert(x, ...)`, `if x:`,
 
 ---
 
+## `GDLintDeclarationSyntax`
+
+One place answers "does this line start a declaration", and it tolerates
+annotations and `static` in front of the keyword. Sixteen checks tested
+`trimmed.begins_with("func ")` or the equivalent, so `@export var speed = 5` and
+`@abstract func may_target(...)` were skipped silently. That is upstream issue
+#15.
+
+**Recognising the declaration turned out to be half of it.** Three checks then
+read the declaration's contents off the raw line, where the first `(` or `:` can
+belong to an annotation rather than to the declaration. Each one had been
+unreachable while the declaration was being skipped, so fixing the recognition is
+what exposed them:
+
+- `too-many-params` counted `@rpc("any_peer") func handler(a, b, c, d, e, f)` as
+  having one parameter, by measuring the annotation's argument list.
+- `unused-parameter` reported `Parameter '""' is declared but never used` on the
+  same line, that being what is left of `"any_peer"` after string literals are
+  removed.
+- `missing-type-hint` skipped `@export_file("res://levels/x.tscn") var p = ""`
+  entirely. It tests for a colon before the `=` to decide whether a type was
+  written, and the colon in `res://` answers yes.
+
+The first two mean the repro in issue #15 was still not fully fixed here: its
+`annotated_many_params` reported nothing where its plain twin reported six
+parameters. All three now measure `GDLintDeclarationSyntax.after_keyword(...)`,
+which has the prefix already removed.
+
+Verified with matched pairs, each construct written plain and then annotated:
+parameter counts and unused parameters agree across `@rpc("any_peer")`, `static`
+and `@warning_ignore(...) static`, and all six untyped variable forms report while
+all three typed ones stay silent. The addon is unchanged at 618 findings and a
+game project at 23, neither with a `SCRIPT ERROR`.
+
+### The ignore directive, and why upstream has not been told
+
+A `# gdlint:ignore-function` above an annotated or `static` function does worse
+than fail. `_find_function_range` scans forward for the next line starting with
+`func `, and again from there to close the range, so on upstream the search runs
+past the function the directive names and suppresses the next plain `func`
+instead. Reproduced against 3.3.0: the named function is reported and a function
+no directive mentions is silenced. Nothing closes the range but another plain
+`func`, so if what follows is annotated or `static`, it runs to the end of the
+file and takes those with it.
+
+I drafted a comment saying so and decided not to post it. This branch already
+fixes it, through the same helper, and all three shapes were rechecked here to
+confirm that. If any of this goes upstream it goes as a change, not as more
+description of a bug that is already filed.
+
+---
+
 ## The two-repo split
 
 Structure and meaning come from different places, and keeping that straight is the
@@ -412,28 +464,20 @@ Nothing here is blocking. Ordered by how ready each is to pick up.
    and `extends`; it settled `extends` and left this half. Nothing is blocked by
    it, because the name now comes from the engine's global class list instead,
    and that is arguably the better source anyway. A marker on the record, or a
-   separate `kind`, would close it. Worth filing as requirement 9 on the
-   formatter.
+   separate `kind`, would close it. Filed as requirement 9 in the formatter's
+   `docs/specification_index.md`, so this one is waiting on the producer.
 
-2. **Add the over-suppression detail to upstream issue #15.** The issue reports
-   that `gdlint:ignore-function` fails to bind above an annotated or `static`
-   function. What was found afterwards is worse: the directive's range runs past
-   the unrecognised declaration to the next plain `func`, so it suppresses a
-   function it does not name. A fixture with three directives and four print
-   statements reported none of them, including the one no directive covered. That
-   is a stronger case than what was filed and belongs in a comment.
-
-3. **Decide the upstream story for the three checks.** They now depend on the
+2. **Decide the upstream story for the three checks.** They now depend on the
    `gdscript-formatter` binary, which this project should not carry. Offering any
    of them means restoring a text implementation, which reintroduces the bugs
    listed above, or upstream accepting the dependency. `GDLintDeclarationSyntax`
    is unaffected and can be offered on its own.
 
-4. **The editor dock still does not know about any of this.** All three checks are
+3. **The editor dock still does not know about any of this.** All three checks are
    CLI-only, by choice, because this project is developed from an external editor.
    Anyone wanting them in the dock has that work ahead.
 
-5. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
+4. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
    producer keeps it there across incompatible changes on purpose. Recheck after
    every formatter change rather than trusting the guard: assert the fields the
    checks read, diff findings against a saved baseline, confirm stderr has no

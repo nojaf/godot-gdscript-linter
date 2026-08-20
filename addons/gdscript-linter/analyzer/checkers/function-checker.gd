@@ -56,11 +56,13 @@ func _parse_function_signature(line: String, line_num: int) -> Dictionary:
 	if paren_pos > 0:
 		func_data.name = after_func.substr(0, paren_pos).strip_edges()
 
-	# Count parameters
-	var params_start := line.find("(")
-	var params_end := line.find(")")
+	# Count parameters. Measured on `after_func` rather than on the raw line: an
+	# annotation brings its own parentheses, and `@rpc("any_peer") func f(a, b)`
+	# otherwise counts the annotation's argument list and reports one parameter.
+	var params_start := after_func.find("(")
+	var params_end := after_func.find(")")
 	if params_start > 0 and params_end > params_start:
-		var params_str := line.substr(params_start + 1, params_end - params_start - 1)
+		var params_str := after_func.substr(params_start + 1, params_end - params_start - 1)
 		if params_str.strip_edges() != "":
 			func_data.params = params_str.split(",").size()
 
