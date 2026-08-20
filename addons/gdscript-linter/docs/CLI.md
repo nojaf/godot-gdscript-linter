@@ -126,6 +126,43 @@ Use the "Export Config..." button in the editor to save custom configs (e.g., `g
 godot --headless --script ... -- --config gdlint-strict.json
 ```
 
+## The formatter binary
+
+`--check-members`, `--check-unused-functions` and `--check-exports` read source
+structure from `gdscript-formatter index`, a sub-command that exists only on
+[this fork](https://github.com/nojaf/GDScript-formatter/tree/nojaf). Without it
+those three checks refuse to run and the process exits 3. They never fall back to
+checking less, because a report with nothing in it looks exactly like a clean
+project.
+
+The linter and that binary are one system in two languages, so the repository
+builds it for you. Clone the formatter beside this repository:
+
+```
+~/Projects/godot-gdscript-linter     <- this one
+~/Projects/GDScript-formatter        <- the fork, on branch nojaf
+```
+
+Then:
+
+```bash
+export GDLINT_FORMATTER="$(scripts/install-formatter.sh)"
+```
+
+The script finds the sibling checkout, builds it in release mode, verifies the
+binary really has the `index` sub-command, and prints its path. That is all it
+prints, so the command above works as written; progress and errors go to stderr.
+`GDLINT_FORMATTER_REPO` overrides where it looks, and setting `GDLINT_FORMATTER`
+yourself pins a binary that it verifies but does not rebuild.
+
+The `lint.sh` that `copy.sh` generates calls the same script on every run, so the
+two sides are always built from matching sources. An up-to-date build takes a
+fraction of a second. That matters more than it sounds: the index format is
+versioned by policy rather than by a number that moves, so rebuilding together is
+the actual guard against a mismatched producer. Disabling all three checks
+(`NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1`) skips the requirement
+entirely.
+
 ## Member Checking (`--check-members`)
 
 A "will this actually run?" pass, intended right before launching the game. Unlike

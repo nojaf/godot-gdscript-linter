@@ -87,11 +87,18 @@ if [ -e "$LINT_SCRIPT" ] && ! grep -qF "$LINT_MARKER" "$LINT_SCRIPT" 2>/dev/null
 	exit 0
 fi
 
-cat > "$LINT_SCRIPT" <<'LINT_EOF'
+# The installer path is baked in here, at copy time, because the target project
+# has no other way to find the linter repository it was installed from. The
+# generated script falls back to searching if this path stops existing.
+cat > "$LINT_SCRIPT" <<PRELUDE_EOF
 #!/usr/bin/env bash
+# generated-by: gdscript-linter copy.sh — regenerated on every copy, don't edit.
+INSTALL_FORMATTER="$SCRIPT_DIR/scripts/install-formatter.sh"
+PRELUDE_EOF
+
+cat >> "$LINT_SCRIPT" <<'LINT_EOF'
 #
 # lint.sh — run the GDScript linter over this project.
-# generated-by: gdscript-linter copy.sh — regenerated on every copy, don't edit.
 #
 # Usage:
 #   ./lint.sh                       # console report for the whole project
@@ -115,7 +122,8 @@ cat > "$LINT_SCRIPT" <<'LINT_EOF'
 #
 # Set GODOT=/path/to/godot to pin a specific binary.
 #
-# Exit codes: 0 = clean, 1 = warnings, 2 = critical issues.
+# Exit codes: 0 = clean, 1 = warnings, 2 = critical issues, 3 = could not run
+# (no Godot, or the formatter the index-backed checks need is unavailable).
 
 set -uo pipefail
 
@@ -154,32 +162,42 @@ if ! GODOT_BIN="$(find_godot)"; then
 	exit 127
 fi
 
-# The member and unused-function checks read structure from this. Resolving it
-# here means the analyzer never has to guess, and a missing binary is reported
-# by the analyzer with a clear message rather than silently checking less.
-find_formatter() {
-	if [ -n "${GDLINT_FORMATTER:-}" ]; then
-		printf '%s\n' "$GDLINT_FORMATTER"
-		return 0
-	fi
-	if command -v gdscript-formatter >/dev/null 2>&1; then
-		command -v gdscript-formatter
-		return 0
-	fi
-	local candidate
-	for candidate in \
-		"$HOME/Projects/GDScript-formatter/target/release/gdscript-formatter" \
-		"$HOME/Projects/GDScript-formatter/target/debug/gdscript-formatter"; do
-		if [ -x "$candidate" ]; then
-			printf '%s\n' "$candidate"
-			return 0
-		fi
-	done
-	return 1
-}
+# Three of the checks read source structure from `gdscript-formatter index`, so
+# the linter and that binary are one system. The linter repository owns the
+# script that builds it and answers where it is; this asks, rather than guessing
+# at paths that drift. Building on every run is what keeps the two sides in step,
+# and an up-to-date build costs a fraction of a second.
+#
+# Only asked for when a check that needs it is actually going to run, so
+# NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1 ./lint.sh still works
+# with no formatter present at all.
+needs_formatter=0
+if [ "${NO_MEMBER_CHECK:-0}" != "1" ] \
+	|| [ "${NO_UNUSED_CHECK:-0}" != "1" ] \
+	|| [ "${NO_EXPORT_CHECK:-0}" != "1" ]; then
+	needs_formatter=1
+fi
+case " $* " in
+	*" --check-members "*|*" --check-unused-functions "*|*" --check-exports "*)
+		needs_formatter=1 ;;
+esac
 
-if FORMATTER_BIN="$(find_formatter)"; then
-	export GDLINT_FORMATTER="$FORMATTER_BIN"
+if [ "$needs_formatter" = "1" ]; then
+	if [ -x "${INSTALL_FORMATTER:-}" ]; then
+		if FORMATTER_BIN="$("$INSTALL_FORMATTER")"; then
+			export GDLINT_FORMATTER="$FORMATTER_BIN"
+		else
+			# Exit 3, not the installer's own code: this script's contract is
+			# 0 clean / 1 warnings / 2 critical / 3 could not run, and reporting
+			# a missing formatter as 2 would read as "critical issues found".
+			echo "lint.sh: $INSTALL_FORMATTER failed (see above); cannot run the checks that need it" >&2
+			exit 3
+		fi
+	elif [ -z "${GDLINT_FORMATTER:-}" ] && command -v gdscript-formatter >/dev/null 2>&1; then
+		# The linter repository has moved or gone since this script was written.
+		export GDLINT_FORMATTER="$(command -v gdscript-formatter)"
+		echo "lint.sh: ${INSTALL_FORMATTER:-installer} is missing; using gdscript-formatter from PATH" >&2
+	fi
 fi
 
 ADDON_DIR="$PROJECT_DIR/addons/gdscript-linter"
