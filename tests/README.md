@@ -45,6 +45,8 @@ code that triggers it. Start there rather than here.
 | `broken` | a cascade of load failures folding into the script that broke |
 | `members` | the wide-declaration fold, and the three cases that must not fold |
 | `signatures` | a declaration wrapped across lines being read from its first line only |
+| `exports` | every shape of null guard, and where a Node's guard has to live |
+| `unused` | what keeps a function alive, including callers that are scene data rather than code |
 
 ## What is asserted, and what is snapshotted
 

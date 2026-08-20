@@ -1,12 +1,9 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures signatures 1`] = `
-"src/probe.gd:24  info  missing-return-type  Function 'untyped_flat' has no return type annotation
-src/probe.gd:28  info  missing-return-type  Function 'untyped_wrapped' has no return type annotation
-src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters (max 4)
-src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
-src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
-src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
+exports[`fixtures unused 1`] = `
+"src/probe.gd:61  warning  unused-function  Function 'all_done' is never referenced in the project
+src/probe.gd:65  warning  unused-function  Function 'never_mentioned_anywhere' is never referenced in the project
+src/wired.gd:23  warning  unused-function  Function 'never_wired_at_all' is never referenced in the project"
 `;
 
 exports[`fixtures broken 1`] = `
@@ -35,6 +32,13 @@ src/probe.gd:49  info  unused-parameter  Parameter 'never_a' is declared but nev
 src/probe.gd:53  info  unused-parameter  Parameter 'never_b' is declared but never used"
 `;
 
+exports[`fixtures exports 1`] = `
+"src/node_exports.gd:11  critical  unguarded-export  Export 'unguarded' is never null-guarded; add assert(unguarded != null, "...") or declare it optional with '= null'
+src/node_exports.gd:18  critical  unguarded-export  Export 'guarded_too_late' is never null-guarded; add assert(guarded_too_late != null, "...") or declare it optional with '= null'
+src/node_exports.gd:19  critical  unguarded-export  Export 'mentioned_not_tested' is never null-guarded; add assert(mentioned_not_tested != null, "...") or declare it optional with '= null'
+src/resource_exports.gd:11  critical  unguarded-export  Export 'never_guarded' is never null-guarded; add assert(never_guarded != null, "...") or declare it optional with '= null'"
+`;
+
 exports[`fixtures ignores 1`] = `
 "src/probe.gd:21  warning  print-statement  Debug print statement: print("reported: no directive covers this")
 src/probe.gd:30  warning  print-statement  Debug print statement: print("reported: no directive covers this either")
@@ -48,4 +52,13 @@ src/probe.gd:37  critical  unknown-member  'txt' is not a member of Label
 src/probe.gd:38  critical  unknown-member  'tex' is not a member of Label (did you mean 'text'?)
 src/probe.gd:42  critical  wrong-argument-count  Signal 'panel_ready' emitted with 0 argument(s), expected 1
 src/probe.gd:43  critical  method-not-called  'helper' is a method used as a condition without being called; the reference is always true (did you mean 'helper()'?)"
+`;
+
+exports[`fixtures signatures 1`] = `
+"src/probe.gd:24  info  missing-return-type  Function 'untyped_flat' has no return type annotation
+src/probe.gd:28  info  missing-return-type  Function 'untyped_wrapped' has no return type annotation
+src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters (max 4)
+src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
+src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
+src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
 `;

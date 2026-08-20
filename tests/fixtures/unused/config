@@ -1,0 +1,3 @@
+# flags: --check-unused-functions --check unused-function
+# target: res://src
+# exit: 1

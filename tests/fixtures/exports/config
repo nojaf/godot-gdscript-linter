@@ -1,0 +1,3 @@
+# flags: --check-exports --check unguarded-export
+# target: res://src
+# exit: 2
