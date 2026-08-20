@@ -22,6 +22,15 @@ func indented_commented_code() -> void:
 	print("d")
 
 
+func trailing_commented_code() -> void:
+	var kept := 1  #var removed := 2
+	print(kept)
+
+
+func hash_inside_a_string() -> void:
+	print("the docs mention #var x as an example")
+
+
 func prose_is_not_code() -> void:
 	# This sentence mentions a function and a variable without being either.
 	print("c")

@@ -533,8 +533,10 @@ run that exited 0 with no findings.
 Mutation testing is also how the gaps get found. Dropping `connect` from the
 method-name list changed nothing, because that fixture exercised three of its
 fourteen entries. Restricting commented-code detection to column zero changed
-nothing either, because the check only ever sees the trimmed line and those
-clauses are unreachable.
+nothing either, and the conclusion drawn from that was wrong: those clauses were
+called unreachable in these notes when the fixture simply had no case that
+reached them. Writing one showed them doing two things at once, one wanted and
+one not.
 
 ### Three checker bugs it has paid for so far
 

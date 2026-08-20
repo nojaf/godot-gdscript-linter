@@ -129,20 +129,29 @@ func _wrapped_declarations() -> void:
 
 
 func _code_only() -> void:
+	var visible := GDLintStyleChecker.without_strings
 	var strip := GDLintStyleChecker.code_only
 	var blank := func(n: int) -> String: return " ".repeat(n)
 
 	# The quotes stay and the contents are blanked one character for one, so a
 	# column in the result is the same column in the source.
-	_check(strip.call("x = \"abc\""), "x = \"" + blank.call(3) + "\"", "string contents blanked")
-	_check(strip.call("return \"%6.2f  %s\" % [seconds, line]"),
+	_check(visible.call("x = \"abc\""), "x = \"" + blank.call(3) + "\"", "string contents blanked")
+	_check(visible.call("return \"%6.2f  %s\" % [seconds, line]"),
 		"return \"" + blank.call(9) + "\" % [seconds, line]", "format specifier is not code")
-	_check(strip.call("print(\'single\')"), "print(\'" + blank.call(6) + "\')", "single quotes too")
-	_check(strip.call("var n = 42"), "var n = 42", "plain code is untouched")
-	_check(strip.call("var x = 7  # was 250"), "var x = 7  ", "trailing comment dropped")
+	_check(visible.call("print(\'single\')"), "print(\'" + blank.call(6) + "\')", "single quotes too")
+	_check(visible.call("var n = 42"), "var n = 42", "plain code is untouched")
 
 	# `he said \"pay 500\" ok` is 22 characters once the escapes are counted as two.
-	_check(strip.call("print(\"he said \\\"pay 500\\\" ok\")"),
+	_check(visible.call("print(\"he said \\\"pay 500\\\" ok\")"),
 		"print(\"" + blank.call(22) + "\")", "an escaped quote does not end the string")
+
+	# without_strings keeps the comment, because a check looking for
+	# commented-out code needs it. code_only drops it, because a digit in prose
+	# is not a magic number.
+	_check(visible.call("var kept := 1  #var removed := 2"), "var kept := 1  #var removed := 2",
+		"the comment survives without_strings")
+	_check(strip.call("var x = 7  # was 250"), "var x = 7  ", "code_only drops the comment")
 	_check(strip.call("var url = \"res://a#b\"  # note"),
 		"var url = \"" + blank.call(9) + "\"  ", "a hash inside a string is not a comment")
+	_check(strip.call("print(\"#var x\")"), "print(\"" + blank.call(6) + "\")",
+		"nor does a hash in a string start one for code_only")

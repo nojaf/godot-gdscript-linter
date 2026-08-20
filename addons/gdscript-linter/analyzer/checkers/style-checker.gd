@@ -95,14 +95,13 @@ func _extract_string_arg(line: String) -> String:
 
 
 # Returns issue dictionary or null
-## A line with the contents of its string literals blanked out and any trailing
-## comment removed, so only code is left. Positions are preserved, since blanking
-## replaces each character rather than deleting it.
+## A line with the contents of its string literals blanked out, one character for
+## one, so a column in the result is the same column in the source. Both quotes
+## stay, so a string is still visible as one.
 ##
-## A digit inside a string is text and a digit inside a comment is prose. Neither
-## is a number the program uses, and reporting one asks the reader to replace a
-## format specifier with a named constant.
-static func code_only(text: String) -> String:
+## What a string says is text, never code. `print("the docs mention #var x")`
+## holds no commented-out code, and `"%6.2f"` holds no magic number.
+static func without_strings(text: String) -> String:
 	var out := ""
 	var quote := ""
 	var i := 0
@@ -120,12 +119,21 @@ static func code_only(text: String) -> String:
 		elif character == "\"" or character == "'":
 			quote = character
 			out += character  # the quote itself stays, so positions still line up
-		elif character == "#":
-			break  # a comment runs to the end of the line
 		else:
 			out += character
 		i += 1
 	return out
+
+
+## `without_strings`, with the comment dropped as well.
+##
+## A digit in a comment is prose rather than a number the program uses. A check
+## that cares about the comment itself wants `without_strings`, since this
+## throws it away.
+static func code_only(text: String) -> String:
+	var visible := without_strings(text)
+	var comment := visible.find("#")
+	return visible if comment < 0 else visible.substr(0, comment)
 
 
 func check_magic_numbers(line: String, line_num: int) -> Variant:
@@ -163,8 +171,15 @@ func check_magic_numbers(line: String, line_num: int) -> Variant:
 
 # Returns issue dictionary or null
 func check_commented_code(line: String, line_num: int) -> Variant:
+	# The comment is the point here, so string contents are blanked and the
+	# comment kept. Matched anywhere in the line rather than only at its start,
+	# because a commented-out statement trailing real code is still commented-out
+	# code. Writing an example of one in this comment would report this line,
+	# which is a limitation rather than a bug: prose that quotes code and code
+	# that has been commented out are the same thing to a pattern match.
+	var visible := without_strings(line)
 	for pattern in config.commented_code_patterns:
-		if line.begins_with(pattern) or ("\t" + pattern) in line or (" " + pattern) in line:
+		if visible.begins_with(pattern) or ("\t" + pattern) in visible or (" " + pattern) in visible:
 			return {
 				"line": line_num,
 				"severity": "info",
