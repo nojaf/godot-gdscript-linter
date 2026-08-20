@@ -1,3 +1,13 @@
+## Upstream issue #15: a declaration carrying an annotation or `static` was
+## skipped by the checks entirely. Every construct here is written twice, plain
+## and then decorated, and the two halves must report the same thing.
+##
+## The messages matter as much as the lines. The checks recognised the
+## declaration and then read its contents off the raw line, where the first `(`
+## belongs to the annotation:
+##   annotated_many    reported 1 parameter, measuring @rpc("any_peer")'s list
+##   annotated_unused  reported a parameter named `""`, the remains of "any_peer"
+##   pathy_untyped     was skipped, the `:` in "res://levels/x.tscn" read as a type
 class_name DeclProbe
 extends Node
 

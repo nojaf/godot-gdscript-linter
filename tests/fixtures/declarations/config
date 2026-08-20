@@ -1,0 +1,3 @@
+# flags: --check too-many-params,unused-parameter,missing-type-hint,naming-signal,naming-const,naming-enum
+# target: res://src
+# exit: 1

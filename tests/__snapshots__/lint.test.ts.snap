@@ -1,0 +1,42 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`fixtures broken 1`] = `
+"src/annotated_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 1 dependent script(s) fail because of it
+src/broken_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 4 dependent script(s) fail because of it
+src/ghost_child.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above)
+src/own_line.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 1 dependent script(s) fail because of it"
+`;
+
+exports[`fixtures declarations 1`] = `
+"src/probe.gd:14  info  naming-signal  Signal 'plain_bad_Signal' should be snake_case
+src/probe.gd:15  info  naming-signal  Signal 'annotated_bad_Signal' should be snake_case
+src/probe.gd:17  info  missing-type-hint  Variable 'plain_untyped' has no type annotation
+src/probe.gd:18  info  missing-type-hint  Variable 'exported_untyped' has no type annotation
+src/probe.gd:19  info  missing-type-hint  Variable 'ranged_untyped' has no type annotation
+src/probe.gd:20  info  missing-type-hint  Variable 'pathy_untyped' has no type annotation
+src/probe.gd:21  info  missing-type-hint  Variable 'static_untyped' has no type annotation
+src/probe.gd:27  info  naming-const  Constant 'plain_bad_Const' should be SCREAMING_SNAKE_CASE or PascalCase
+src/probe.gd:28  info  naming-const  Constant 'annotated_bad_Const' should be SCREAMING_SNAKE_CASE or PascalCase
+src/probe.gd:30  info  naming-enum  Enum 'plain_bad_Enum' should be PascalCase
+src/probe.gd:33  warning  too-many-params  Function 'plain_many' has 6 parameters (max 4)
+src/probe.gd:37  warning  too-many-params  Function 'annotated_many' has 6 parameters (max 4)
+src/probe.gd:41  warning  too-many-params  Function 'static_many' has 6 parameters (max 4)
+src/probe.gd:45  warning  too-many-params  Function 'both_many' has 6 parameters (max 4)
+src/probe.gd:49  info  unused-parameter  Parameter 'never_a' is declared but never used
+src/probe.gd:53  info  unused-parameter  Parameter 'never_b' is declared but never used"
+`;
+
+exports[`fixtures ignores 1`] = `
+"src/probe.gd:21  warning  print-statement  Debug print statement: print("reported: no directive covers this")
+src/probe.gd:30  warning  print-statement  Debug print statement: print("reported: no directive covers this either")
+src/probe.gd:39  warning  print-statement  Debug print statement: print("reported: nothing closes a range but the next plain f"
+`;
+
+exports[`fixtures members 1`] = `
+"src/probe.gd:21  warning  unknown-member  'settings' is declared as Resource, but 3 members are read from it that Resource does not have (brightness, difficulty, volume). FoldSettings has all of them: narrow the declaration to it, or cast at the use sites.
+src/probe.gd:33  critical  unknown-member  'clock_labl' is not a member of probe.gd (did you mean 'clock'?)
+src/probe.gd:37  critical  unknown-member  'txt' is not a member of Label
+src/probe.gd:38  critical  unknown-member  'tex' is not a member of Label (did you mean 'text'?)
+src/probe.gd:42  critical  wrong-argument-count  Signal 'panel_ready' emitted with 0 argument(s), expected 1
+src/probe.gd:43  critical  method-not-called  'helper' is a method used as a condition without being called; the reference is always true (did you mean 'helper()'?)"
+`;

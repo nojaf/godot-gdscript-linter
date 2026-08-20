@@ -1,0 +1,3 @@
+# flags: --check-members --check unknown-member,wrong-argument-count,method-not-called,script-load-failed
+# target: res://src
+# exit: 2

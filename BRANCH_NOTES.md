@@ -489,9 +489,23 @@ one.
 ## Testing
 
 `bun test` runs the suite: unit assertions over the pure functions, executed
-inside Godot, and four fixture projects that are linted and compared against an
-`expect` file. About eight seconds for all of it, and `bun test --watch` while
-working on a checker.
+inside Godot, and four fixture projects, each with a `config` naming the flags
+to run and a snapshot holding its findings. About nine seconds for all of it,
+and `bun test --watch` while working on a checker.
+
+The split between what is snapshotted and what is asserted is the design. The
+invariants are explicit and never generated: the exit code, stderr free of
+`SCRIPT ERROR`, and at least one finding. A snapshot of "nothing" is a perfectly
+good snapshot, which is exactly the failure that has to stay impossible. Only
+the content of the findings is snapshotted, because that is the part that was
+hand-maintained badly: the `ignores` fixture was committed asserting three
+findings exist at three lines and nothing about what they said.
+
+A snapshot mismatch prints a diff of two blobs, which says the strings differ
+rather than what changed. On failure the runner reads the stored snapshot and
+reports which findings appeared, disappeared or changed wording, quoting the
+fixture line each one points at, along with the flags it ran and how to accept
+or inspect the result.
 
 Each fixture pins a bug this project shipped: annotated and `static` declarations
 being skipped, an ignore directive suppressing a function it does not name, a

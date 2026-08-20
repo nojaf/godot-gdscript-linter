@@ -1,0 +1,3 @@
+# flags: --check print-statement
+# target: res://src
+# exit: 1

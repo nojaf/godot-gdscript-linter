@@ -1,0 +1,4 @@
+# flags: --check-members --check script-load-failed
+# target: res://src
+# exit: 2
+# allow-script-errors: yes
