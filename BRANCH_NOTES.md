@@ -302,9 +302,35 @@ the chain position from the index. Neither half alone is enough, and the half th
 used to be faked with regular expressions is where every bug came from.
 
 Design and open requirements for the index live in the formatter fork at
-`docs/specification_index.md`. Requirement 7, naming the base class on a class
-declaration, is the one still outstanding, and it would remove the last two
-regular expressions in `member-check.gd`.
+`docs/specification_index.md`.
+
+### Where requirement 7 leaves things
+
+Requirement 7 is implemented. `extends` now appears in two places, holding the
+base as written:
+
+```jsonl
+{"record": "file",        "schema": 1, "path": "res://hud/hud.gd", "extends": "Node"}
+{"record": "declaration", "kind": "class", "name": "Hud", "extends": "Node", ...}
+```
+
+The producer described this as a breaking change while leaving `schema` at 1. It
+was rechecked here field by field and end to end: every field the checks read is
+unchanged, a real game project matches its baseline exactly, the addon's
+member-check findings are unchanged at 95, and neither run produces a
+`SCRIPT ERROR`. For this consumer the change was additive.
+
+Requirement 8 was filed as a result: bump `schema` on any incompatible change. The
+consumer's version guard is the only thing between an incompatible producer and a
+silently smaller report, and it cannot fire if the number never moves.
+
+**The work this unlocks, not yet done.** `member-check.gd` still carries its last
+two regular expressions, `_declared_class_name` and `_declared_base`, used only to
+fold cascading load failures into their root cause. The index can answer both now,
+and it parses scripts that Godot cannot compile, which is exactly when they are
+needed. One catch: `GDLintSourceIndex._start_file` currently keeps only `path`,
+`parse_error` and the record buckets, so it drops the header's `extends`. That
+field has to be carried into the entry before the regular expressions can go.
 
 ## Testing
 
