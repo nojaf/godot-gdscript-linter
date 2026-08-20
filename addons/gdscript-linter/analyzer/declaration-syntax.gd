@@ -59,7 +59,7 @@ static func after_keyword(trimmed: String, keyword: String) -> String:
 ## True when the declaration is marked @abstract. Such a declaration has no body
 ## at all, so checks about what a body contains do not apply to it: it is neither
 ## an empty function nor a function that fails to use its parameters.
-static func is_abstract(trimmed: String) -> bool:
+static func declares_abstract(trimmed: String) -> bool:
 	return trimmed.strip_edges().begins_with("@abstract")
 
 

@@ -47,7 +47,7 @@ func _parse_function_signature(line: String, line_num: int) -> Dictionary:
 		"line": line_num,
 		"params": 0,
 		"has_return_type": "->" in line,
-		"is_abstract": GDLintDeclarationSyntax.is_abstract(line),
+		"is_abstract": GDLintDeclarationSyntax.declares_abstract(line),
 	}
 
 	# Extract function name

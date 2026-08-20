@@ -38,7 +38,7 @@ func _collect_declarations(lines: Array) -> void:
 		var line_num := i + 1
 
 		# Track function boundaries
-		if GDLintDeclarationSyntax.declares(trimmed, "func") and not GDLintDeclarationSyntax.is_abstract(trimmed):
+		if GDLintDeclarationSyntax.declares(trimmed, "func") and not GDLintDeclarationSyntax.declares_abstract(trimmed):
 			in_function = true
 			current_func_name = _extract_func_name(trimmed)
 
