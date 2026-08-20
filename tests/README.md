@@ -76,7 +76,9 @@ bun test -t members -u
 
 Read that diff before committing it. Regenerating an expectation is how a broken
 check gets frozen into a suite, and `git diff` on the snapshot is the last place
-anyone looks at it.
+anyone looks at it. It is also the only place: `-u` alongside `-t` rewrites the
+whole snapshot file, so check what changed there rather than trusting the count
+`bun test` prints.
 
 To poke at the project a fixture ran against:
 

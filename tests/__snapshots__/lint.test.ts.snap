@@ -1,5 +1,14 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
+exports[`fixtures signatures 1`] = `
+"src/probe.gd:24  info  missing-return-type  Function 'untyped_flat' has no return type annotation
+src/probe.gd:28  info  missing-return-type  Function 'untyped_wrapped' has no return type annotation
+src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters (max 4)
+src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
+src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
+src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
+`;
+
 exports[`fixtures broken 1`] = `
 "src/annotated_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 1 dependent script(s) fail because of it
 src/broken_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 4 dependent script(s) fail because of it

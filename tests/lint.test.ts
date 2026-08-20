@@ -194,7 +194,12 @@ function explain(name: string, config: Config, actual: Finding[], work: string) 
     .map((line) => line.trim())
     .filter(Boolean);
   const current = actual.map(asLine);
-  const key = (line: string) => line.split("  ")[0]!;
+  // Location AND check id. Keyed on location alone, two findings on one line
+  // collapse into each other and the report quietly loses one of them.
+  const key = (line: string) => {
+    const parts = line.split("  ");
+    return `${parts[0]} ${parts[2] ?? ""}`;
+  };
 
   const before = new Map(previous.map((line) => [key(line), line]));
   const after = new Map(current.map((line) => [key(line), line]));
@@ -203,7 +208,8 @@ function explain(name: string, config: Config, actual: Finding[], work: string) 
   const added = [...after.keys()].filter((k) => !before.has(k));
   const changed = [...after.keys()].filter((k) => before.has(k) && before.get(k) !== after.get(k));
 
-  const source = (location: string) => {
+  const source = (keyed: string) => {
+    const location = keyed.split(" ")[0]!;
     const at = location.lastIndexOf(":");
     const file = join(work, location.slice(0, at));
     const line = Number(location.slice(at + 1));

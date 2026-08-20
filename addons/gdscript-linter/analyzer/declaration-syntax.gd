@@ -22,6 +22,63 @@ extends RefCounted
 ## Modifiers that may sit between the annotations and the keyword.
 const MODIFIERS := ["static"]
 
+## Stops an unbalanced parenthesis from swallowing the rest of a file.
+const MAX_WRAPPED_LINES := 40
+
+
+## A declaration as one line, however many it was written across, and how many
+## lines it occupies. Returns `{"text": String, "span": int}`, with a span of 1
+## for the ordinary case.
+##
+## A parameter list may be wrapped:
+##
+##     func move(
+##         target: Vector2,
+##         speed: float
+##     ) -> void:
+##
+## Read one line at a time that is `func move(`: the `->` appears to be missing,
+## the parameter list appears to be empty, and both are wrong. A check that
+## reports what it sees then invents a missing return type and overlooks every
+## parameter, which is three defects from one cause.
+##
+## Parentheses inside strings and comments do not count, so a default value like
+## `msg := "(unset)"` does not hold the scan open.
+static func declaration_at(lines: Array, index: int) -> Dictionary:
+	var text := String(lines[index]).strip_edges()
+	var depth := _paren_depth(text)
+	var span := 1
+	while depth > 0 and index + span < lines.size() and span < MAX_WRAPPED_LINES:
+		var next := String(lines[index + span]).strip_edges()
+		text += " " + next
+		depth += _paren_depth(next)
+		span += 1
+	return {"text": text, "span": span}
+
+
+# Net change in parenthesis depth, skipping quoted text and trailing comments.
+static func _paren_depth(text: String) -> int:
+	var depth := 0
+	var quote := ""
+	var i := 0
+	while i < text.length():
+		var character := text[i]
+		if not quote.is_empty():
+			if character == "\\":
+				i += 1  # an escaped character cannot close the string
+			elif character == quote:
+				quote = ""
+		elif character == "\"" or character == "'":
+			quote = character
+		elif character == "#":
+			break  # a comment runs to the end of the line
+		elif character == "(":
+			depth += 1
+		elif character == ")":
+			depth -= 1
+		i += 1
+	return depth
+
 
 ## The line with any leading annotations and modifiers removed, so the keyword
 ## is first. Returns the input unchanged when there is nothing to strip.

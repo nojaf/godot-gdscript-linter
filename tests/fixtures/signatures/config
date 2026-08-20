@@ -1,0 +1,3 @@
+# flags: --check missing-return-type,too-many-params,unused-parameter
+# target: res://src
+# exit: 1

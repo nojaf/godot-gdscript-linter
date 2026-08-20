@@ -40,11 +40,16 @@ func _collect_declarations(lines: Array) -> void:
 		# Track function boundaries
 		if GDLintDeclarationSyntax.declares(trimmed, "func") and not GDLintDeclarationSyntax.declares_abstract(trimmed):
 			in_function = true
-			current_func_name = _extract_func_name(trimmed)
+			# The whole declaration, which may be wrapped across lines. Reading
+			# the first line alone finds no closing parenthesis, so a wrapped
+			# signature yields no parameters and can never report an unused one.
+			var declaration := GDLintDeclarationSyntax.declaration_at(lines, i)
+			current_func_name = _extract_func_name(String(declaration.text))
 
 			# Extract parameters if enabled
 			if config.check_unused_parameters:
-				_extract_parameters(trimmed, line_num, current_func_name)
+				_extract_parameters(String(declaration.text), line_num, current_func_name,
+					int(declaration.span))
 
 		# Skip class-level variables (only check local variables inside functions)
 		if not in_function:
@@ -99,7 +104,7 @@ func _extract_func_name(line: String) -> String:
 	return ""
 
 
-func _extract_parameters(line: String, line_num: int, func_name: String) -> void:
+func _extract_parameters(line: String, line_num: int, func_name: String, span: int = 1) -> void:
 	# Skip built-in virtual methods where parameters may be intentionally unused
 	var virtual_methods := ["_ready", "_process", "_physics_process", "_input",
 		"_unhandled_input", "_gui_input", "_notification", "_draw", "_enter_tree",
@@ -133,6 +138,7 @@ func _extract_parameters(line: String, line_num: int, func_name: String) -> void
 		_declarations.append({
 			"name": param_name,
 			"line": line_num,
+			"span": span,
 			"type": "parameter",
 			"used": false
 		})
@@ -227,6 +233,10 @@ func _find_usages(lines: Array) -> void:
 	for decl in _declarations:
 		var decl_name: String = decl.name
 		var decl_line: int = decl.line
+		# A wrapped signature lists its parameters on lines after the one the
+		# declaration is reported at. Skipping only that first line leaves each
+		# parameter reading as a use of itself, so none is ever unused.
+		var decl_span: int = int(decl.get("span", 1))
 
 		var usage_regex := RegEx.new()
 		usage_regex.compile("\\b" + decl_name + "\\b")
@@ -235,8 +245,8 @@ func _find_usages(lines: Array) -> void:
 			var line: String = lines[i]
 			var line_num := i + 1
 
-			# Skip the declaration line itself
-			if line_num == decl_line:
+			# Skip the declaration itself, however many lines it spans
+			if line_num >= decl_line and line_num < decl_line + decl_span:
 				continue
 
 			# Skip comments

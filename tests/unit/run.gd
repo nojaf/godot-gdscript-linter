@@ -15,6 +15,7 @@ var _failures := 0
 
 func _init() -> void:
 	_declaration_syntax()
+	_wrapped_declarations()
 	# Printed so the caller can tell "everything passed" from "nothing ran".
 	# Godot exits 0 when a script fails to load at all, so an exit code is not
 	# evidence that any of this executed.
@@ -77,3 +78,51 @@ func _declaration_syntax() -> void:
 
 	_check(syntax.declares_abstract("@abstract func may_target() -> bool"), true, "abstract")
 	_check(syntax.declares_abstract("func may_target() -> bool:"), false, "not abstract")
+
+
+func _wrapped_declarations() -> void:
+	var syntax := GDLintDeclarationSyntax
+
+	# The ordinary case is one line and must stay that way.
+	var flat := ["func move(target: Vector2) -> void:", "\tpass"]
+	_check(syntax.declaration_at(flat, 0).text, "func move(target: Vector2) -> void:", "flat text")
+	_check(syntax.declaration_at(flat, 0).span, 1, "flat span")
+
+	# Wrapped: the `->` is on the closing line and the parameters are in between.
+	var wrapped := [
+		"func move(",
+		"\ttarget: Vector2,",
+		"\tspeed: float",
+		") -> void:",
+		"\tpass",
+	]
+	_check(syntax.declaration_at(wrapped, 0).text,
+		"func move( target: Vector2, speed: float ) -> void:", "wrapped text")
+	_check(syntax.declaration_at(wrapped, 0).span, 4, "wrapped span")
+	_check(syntax.after_keyword(syntax.declaration_at(wrapped, 0).text, "func"),
+		"move( target: Vector2, speed: float ) -> void:", "wrapped, prefixes stripped")
+
+	# A parenthesis inside a string does not hold the scan open. Reading this one
+	# line at a time, `(unset)` opens a group that the next line never closes.
+	var stringy := ["func warn(message := \"(unset)\") -> void:", "\tpass"]
+	_check(syntax.declaration_at(stringy, 0).span, 1, "parenthesis inside a string")
+
+	# Nor does one inside a trailing comment.
+	var commented := ["func warn() -> void:  # takes no arguments (yet)", "\tpass"]
+	_check(syntax.declaration_at(commented, 0).span, 1, "parenthesis inside a comment")
+
+	# An annotation's own parentheses close on the same line and change nothing.
+	var annotated := ["@rpc(\"any_peer\") func net(a: int) -> void:", "\tpass"]
+	_check(syntax.declaration_at(annotated, 0).span, 1, "annotated on one line")
+
+	# Nested parentheses in a default value.
+	var nested := ["func at(where := Vector2(1, 2)) -> void:", "\tpass"]
+	_check(syntax.declaration_at(nested, 0).span, 1, "nested parentheses")
+
+	# Source that never closes must not swallow the file.
+	var broken := ["func oops("]
+	for i in range(60):
+		broken.append("\ta: int,")
+	_check(syntax.declaration_at(broken, 0).span <= GDLintDeclarationSyntax.MAX_WRAPPED_LINES,
+		true, "unbalanced source is bounded")
+

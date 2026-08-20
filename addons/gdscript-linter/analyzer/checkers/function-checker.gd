@@ -19,19 +19,30 @@ func analyze_functions(lines: Array, file_result, add_issue_callback: Callable, 
 	var in_function := false
 	var func_body_lines: Array[String] = []
 
+	var skip_until := 0
+
 	for i in range(lines.size()):
 		var line: String = lines[i]
 		var trimmed := line.strip_edges()
+
+		if i < skip_until:
+			continue  # a continuation of the signature above, not a body line
 
 		if GDLintDeclarationSyntax.declares(trimmed, "func"):
 			# Finalize previous function
 			if in_function and current_func:
 				_finalize_function(current_func, func_body_lines, file_result, add_issue_callback, add_pinned_issue_callback)
 
+			# A parameter list may be wrapped across lines. Read the whole
+			# declaration: on the first line alone a wrapped signature has no
+			# `->` and no parameters, and both would be reported as fact.
+			var declaration := GDLintDeclarationSyntax.declaration_at(lines, i)
+			skip_until = i + int(declaration.span)
+
 			# Start new function
 			in_function = true
 			func_body_lines = []
-			current_func = _parse_function_signature(trimmed, i + 1)
+			current_func = _parse_function_signature(String(declaration.text), i + 1)
 
 		elif in_function:
 			func_body_lines.append(line)
