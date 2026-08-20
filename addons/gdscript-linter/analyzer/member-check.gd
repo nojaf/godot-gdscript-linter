@@ -84,21 +84,31 @@ func _build_global_class_map() -> void:
 # A broken base script breaks everything extending it. Report the root cause and
 # fold the dependents into its message rather than listing every consequence.
 #
-# Neither half can come from the engine alone. A script that does not compile has
-# no base script to ask for, so what it extends is read from the index, which
-# parses it anyway: these failures are semantic, not syntactic. Turning that base
-# into a path needs the project's global class list, which the engine keeps
-# whether or not a script compiles, and which covers the whole project rather
-# than only the paths being analyzed.
+# Both halves come from the index, and neither can come from the engine. A script
+# that does not compile has no base script to ask what it extends, and the
+# engine's global class list is built at import, so a `class_name` written since
+# the last `--import` is missing from it and a real cascade reports as several
+# unrelated failures. The index parses these files anyway, their failures being
+# semantic rather than syntactic, and reads them as they are on disk.
+#
+# `_global_classes` is deliberately not used here, though it answers the same
+# question. It is the right source for resolving a member's declared type, where
+# the script has to load for its members to be read at all, and the wrong one
+# here, where the script by definition does not load.
+#
+# The index skips `res://addons` unless an addon is what is being analyzed, so a
+# base class declared by an addon does not fold. Addon code is not the code under
+# analysis, and the consequence is one extra finding rather than a wrong one.
 func _report_load_failures(index: GDLintSourceIndex, broken: Array) -> Array:
+	var declared := index.declared_classes()
 	var caused_by := {}
 	for path: String in broken:
 		var base := index.file_extends(path)
 		if base.is_empty():
 			continue
 		var base_path := ""
-		if _global_classes.has(base):
-			base_path = _global_classes[base]
+		if declared.has(base):
+			base_path = declared[base]
 		elif base.begins_with("res://"):
 			base_path = base
 		if base_path != path and broken.has(base_path):

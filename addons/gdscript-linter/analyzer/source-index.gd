@@ -174,6 +174,27 @@ func file_extends(path: String) -> String:
 	return written.trim_prefix("\"").trim_suffix("\"")
 
 
+## `class_name` to res:// path, for every indexed file that declares one.
+##
+## Only the declaration marked `is_file_class` counts. An inner class is a
+## `kind: "class"` record at file scope too, and registering one would answer
+## "which file declares X" with a name no other file can write in an `extends`.
+##
+## Unlike the engine's global class list this is read from the files as they are
+## on disk, so a `class_name` added since the last `--import` is in it.
+func declared_classes() -> Dictionary:
+	var classes := {}
+	for path: String in files:
+		for declaration: Dictionary in files[path].declarations:
+			if String(declaration.get("kind", "")) != "class":
+				continue
+			if not bool(declaration.get("is_file_class", false)):
+				continue
+			classes[String(declaration.get("name", ""))] = path
+			break
+	return classes
+
+
 ## The line a record starts on, one-based, matching what issues report.
 static func line_of(record: Dictionary) -> int:
 	return int(record.get("range", {}).get("start_row", 1))

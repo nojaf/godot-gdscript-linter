@@ -355,9 +355,10 @@ used to be faked with regular expressions is where every bug came from.
 
 The split is not always this clean. A script that fails to compile has structure
 and no meaning at all: the engine cannot say what it extends, or what it is
-called, because there is no compiled script to ask. `script-load-failed` reads the
-base from the index for that reason, and the class name from the project's global
-class list, which the engine keeps whether or not the script compiles.
+called, because there is no compiled script to ask. `script-load-failed` takes
+both from the index for that reason. The one place the engine still wins is
+resolving a member's declared type, where the script has to load for its members
+to be read at all.
 
 Design and open requirements for the index live in the formatter fork at
 `docs/specification_index.md`.
@@ -405,26 +406,47 @@ included, so a script that mentioned the word above its real header line was
 reported as its own root cause instead of being folded into the script that
 actually broke.
 
-`_declared_class_name` could not come from the index, and this is the part of
-requirement 7 that did not land. `class_name Foo` and a file-level `class Foo`
-both arrive as `kind: "class"` with `scope: ""`, and no field separates them, so
-asking the index which name the file declares has no reliable answer. The engine
-has one: `ProjectSettings.get_global_class_list()` still lists the class name of
-a script that fails to compile, which was the whole reason for reading text here.
-That map was already being built a few lines above, as `_global_classes`, and is
-now what the fold reads.
-
-The trade is worth writing down. The global class list comes from the import
-cache, so a `class_name` added since the last `--import` is not in it, and the
-fold then reports each failure separately. Noisier, never wrong. The text scan
-read the current file and had no such gap, but it also counted `class_name` in a
-comment.
+`_declared_class_name` could not come from the index at first, and that became
+requirement 9. `class_name Foo` and a file-level `class Foo` both arrived as
+`kind: "class"` with `scope: ""`, with no field separating them, so asking the
+index which name a file declares had no reliable answer. The engine had one:
+`ProjectSettings.get_global_class_list()` still lists the class name of a script
+that fails to compile, and that map was already being built a few lines above as
+`_global_classes`.
 
 Verified the usual way. A fixture project of cascading failures produces the same
 findings except the comment case above, which is the intended fix and moves one
 root cause from four dependents to five. This addon and a second real project run
 all three checks with identical findings, including that project's five
 pre-existing load failures, and no new `SCRIPT ERROR` on either.
+
+### Requirement 9, and the last thing the engine was doing here
+
+The producer now marks the file's own class with `is_file_class`, and inner
+classes no longer report the file's `extends` as their own. `declared_classes()`
+builds the name-to-path map off that marker, and the fold reads it instead of the
+engine's list.
+
+This closes a gap that was real rather than theoretical. The global class list is
+built at import, so a `class_name` written since the last `--import` is not in it.
+Two new scripts, a broken `class_name NewBase` and a child extending it, added
+without reimporting, reported as two unrelated failures. The same run now folds
+them into one, no import needed. The index reads the files as they are on disk.
+
+`is_file_class` is load-bearing rather than decorative, and it was checked by
+removing it: with every `class` record registered, a script writing `extends
+Ghost` folds into whichever file happens to contain an inner class of that name,
+which is a fold Godot itself would never make.
+
+`_global_classes` stays, for the other question. Resolving `var enemy: Enemy` to a
+file means loading that file to read its members, so a class missing from the
+import cache is unresolvable there whatever the index says. Two maps, two
+questions: what a broken script is called, and what a working one contains.
+
+The index skips `res://addons` unless an addon is the analysis target, so a base
+class declared by an addon no longer folds. That is deliberate. Addon code is not
+the code under analysis, and the cost is one extra finding rather than a wrong
+one.
 
 ## Testing
 
@@ -457,27 +479,17 @@ produce identical output, so both directions have to be proven.
 
 Nothing here is blocking. Ordered by how ready each is to pick up.
 
-1. **Ask the index to tell a `class_name` apart from an inner `class`.** Both
-   arrive as `kind: "class"` with `scope: ""`, and nothing on the record says
-   which is which, so the index cannot answer which name a file declares.
-   Requirement 7 was filed to retire the consumer's text scan for `class_name`
-   and `extends`; it settled `extends` and left this half. Nothing is blocked by
-   it, because the name now comes from the engine's global class list instead,
-   and that is arguably the better source anyway. A marker on the record, or a
-   separate `kind`, would close it. Filed as requirement 9 in the formatter's
-   `docs/specification_index.md`, so this one is waiting on the producer.
-
-2. **Decide the upstream story for the three checks.** They now depend on the
+1. **Decide the upstream story for the three checks.** They now depend on the
    `gdscript-formatter` binary, which this project should not carry. Offering any
    of them means restoring a text implementation, which reintroduces the bugs
    listed above, or upstream accepting the dependency. `GDLintDeclarationSyntax`
    is unaffected and can be offered on its own.
 
-3. **The editor dock still does not know about any of this.** All three checks are
+2. **The editor dock still does not know about any of this.** All three checks are
    CLI-only, by choice, because this project is developed from an external editor.
    Anyone wanting them in the dock has that work ahead.
 
-4. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
+3. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
    producer keeps it there across incompatible changes on purpose. Recheck after
    every formatter change rather than trusting the guard: assert the fields the
    checks read, diff findings against a saved baseline, confirm stderr has no
