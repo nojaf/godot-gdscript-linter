@@ -134,6 +134,10 @@ Enable project-wide ASCII enforcement via config: `ascii_only_project_wide = tru
 
 Override global thresholds with stricter limits. Issues fire at CRITICAL severity. When a strict directive exists for a rule, the normal threshold check is suppressed.
 
+The limit applies whether or not the global threshold is also exceeded, which is the point of it: a stricter limit is tighter than the global one by definition, so most of what it forbids sits comfortably inside the global threshold. `# gdlint:strict-function:long-function=3` reports a five-line function while the global limit stays at 30.
+
+The check being tightened has to be enabled. A run narrowed with `--check strict-limit` alone reports nothing, because there is no threshold check left for the directive to override.
+
 **File-scoped** (first 10 lines):
 ```gdscript
 # gdlint:strict-file:file-length=200

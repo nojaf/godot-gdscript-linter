@@ -115,21 +115,35 @@ func _check_function_length(func_data: Dictionary, line_count: int, add_pinned_c
 		add_pinned_callback.call(func_line, "warning", "long-function",
 			"Function '%s' exceeds %d lines (%d)" % [func_name, config.function_line_limit, line_count],
 			line_count, config.function_line_limit, context)
+	else:
+		# Inside both limits. Offered anyway, because a gdlint:strict directive
+		# is tighter than the global limit by definition, so the values it
+		# forbids are mostly values the global limits allow.
+		add_pinned_callback.call(func_line, "", "long-function", "",
+			line_count, config.function_line_limit, context)
 
 
 func _check_parameter_count(func_data: Dictionary, add_pinned_callback: Callable) -> void:
-	if not config.check_parameters or func_data.params <= config.max_parameters:
+	if not config.check_parameters:
 		return
 	var context := "Function '%s'" % func_data.name
+	if func_data.params <= config.max_parameters:
+		add_pinned_callback.call(func_data.line, "", "too-many-params", "",
+			func_data.params, config.max_parameters, context)
+		return
 	add_pinned_callback.call(func_data.line, "warning", "too-many-params",
 		"Function '%s' has %d parameters (max %d)" % [func_data.name, func_data.params, config.max_parameters],
 		func_data.params, config.max_parameters, context)
 
 
 func _check_nesting_depth(func_data: Dictionary, max_nesting: int, add_pinned_callback: Callable) -> void:
-	if not config.check_nesting or max_nesting <= config.max_nesting:
+	if not config.check_nesting:
 		return
 	var context := "Function '%s'" % func_data.name
+	if max_nesting <= config.max_nesting:
+		add_pinned_callback.call(func_data.line, "", "deep-nesting", "",
+			max_nesting, config.max_nesting, context)
+		return
 	add_pinned_callback.call(func_data.line, "warning", "deep-nesting",
 		"Function '%s' has %d nesting levels (max %d)" % [func_data.name, max_nesting, config.max_nesting],
 		max_nesting, config.max_nesting, context)
@@ -157,6 +171,9 @@ func _check_complexity(func_data: Dictionary, complexity: int, add_pinned_callba
 	elif complexity > config.cyclomatic_warning:
 		add_pinned_callback.call(func_line, "warning", "high-complexity",
 			"Function '%s' has complexity %d (warning at %d)" % [func_name, complexity, config.cyclomatic_warning],
+			complexity, config.cyclomatic_warning, context)
+	else:
+		add_pinned_callback.call(func_line, "", "high-complexity", "",
 			complexity, config.cyclomatic_warning, context)
 
 

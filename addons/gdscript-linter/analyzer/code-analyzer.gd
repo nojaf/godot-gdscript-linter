@@ -116,20 +116,21 @@ func _add_issue_from_checker(file_path: String, line_num: int, severity: String,
 	result.add_issue(issue)
 
 
+# A measurement, whether or not it breaks a global limit.
+#
+# An empty severity means the value is inside the global limits, so nothing here
+# would report it. It is still offered, because a strict directive is tighter
+# than the global limit by definition and is the only thing that can object to a
+# value the global limits allow. Deciding that at the call site would mean the
+# case a stricter limit exists for could never reach this function.
 func _add_pinned_issue_from_checker(file_path: String, line_num: int, severity: String, check_id: String, message: String, actual_value: int, limit: int, context: String) -> void:
-	# Check for strict override FIRST — replaces the normal check entirely
-	if config.check_strict_limits:
-		var strict_limit: int = _strict_handler.get_strict_limit(line_num, check_id)
-		if strict_limit >= 0:
-			if actual_value > strict_limit:
-				var msg := "%s exceeds strict limit (%d/%d)" % [context, actual_value, strict_limit]
-				var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.CRITICAL, "strict-limit", msg)
-				if config.respect_ignore_directives and _ignore_handler.should_ignore(line_num, "strict-limit"):
-					result.add_ignored_issue(issue)
-				else:
-					result.add_issue(issue)
-			# Whether exceeded or not, the normal check is suppressed
-			return
+	# A strict override replaces the normal check entirely, whether or not the
+	# value exceeds it.
+	if _apply_strict_limit(file_path, line_num, check_id, context, actual_value):
+		return
+
+	if severity.is_empty():
+		return  # inside the global limits, and no strict directive objected
 
 	# Bypass ignore handling if disabled
 	if not config.respect_ignore_directives:
@@ -304,6 +305,27 @@ func _analyze_file_level(lines: Array, file_path: String, file_result) -> void:
 				_add_issue(file_path, issue.line, _severity_from_string(issue.severity), issue.check_id, issue.message)
 
 
+# True when a strict directive covers this check here, which means it decides
+# the outcome and the normal thresholds do not apply.
+func _apply_strict_limit(file_path: String, line_num: int, check_id: String,
+		context: String, actual_value: int) -> bool:
+	if not config.check_strict_limits:
+		return false
+	var strict_limit: int = _strict_handler.get_strict_limit(line_num, check_id)
+	if strict_limit < 0:
+		return false
+
+	if actual_value > strict_limit:
+		var msg := "%s exceeds strict limit (%d/%d)" % [context, actual_value, strict_limit]
+		var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.CRITICAL,
+			"strict-limit", msg)
+		if config.respect_ignore_directives and _ignore_handler.should_ignore(line_num, "strict-limit"):
+			result.add_ignored_issue(issue)
+		else:
+			result.add_issue(issue)
+	return true
+
+
 func _check_file_length(file_path: String, line_count: int) -> void:
 	var context := "File"
 	if line_count > config.line_limit_hard:
@@ -313,6 +335,11 @@ func _check_file_length(file_path: String, line_count: int) -> void:
 	elif line_count > config.line_limit_soft:
 		_add_pinned_issue_from_checker(file_path, 1, "warning", "file-length",
 			"File exceeds %d lines (%d)" % [config.line_limit_soft, line_count],
+			line_count, config.line_limit_soft, context)
+	else:
+		# Inside both limits, so offered rather than reported. Only a strict
+		# directive can object to a file this size.
+		_add_pinned_issue_from_checker(file_path, 1, "", "file-length", "",
 			line_count, config.line_limit_soft, context)
 
 
@@ -333,11 +360,17 @@ func _check_god_class(file_path: String, file_result) -> void:
 		_add_pinned_issue_from_checker(file_path, 1, "warning", "god-class-functions",
 			"God class: %d public functions (max %d)" % [public_funcs, config.god_class_functions],
 			public_funcs, config.god_class_functions, "Public functions")
+	else:
+		_add_pinned_issue_from_checker(file_path, 1, "", "god-class-functions", "",
+			public_funcs, config.god_class_functions, "Public functions")
 
 	# Check signals limit
 	if signal_count > config.god_class_signals:
 		_add_pinned_issue_from_checker(file_path, 1, "warning", "god-class-signals",
 			"God class: %d signals (max %d)" % [signal_count, config.god_class_signals],
+			signal_count, config.god_class_signals, "Signals")
+	else:
+		_add_pinned_issue_from_checker(file_path, 1, "", "god-class-signals", "",
 			signal_count, config.god_class_signals, "Signals")
 
 

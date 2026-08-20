@@ -1,11 +1,5 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures directives 1`] = `
-"src/child_violating.gd:1  critical  sealed-violation  Cannot extend 'SealedBase' - class is marked as #@Sealed (defined in res://src/base.gd)
-src/strict.gd:1  critical  strict-limit  File exceeds strict limit (47/12)
-src/strict.gd:26  critical  strict-limit  Function 'over_the_strict_limit' exceeds strict limit (14/3)"
-`;
-
 exports[`fixtures broken 1`] = `
 "src/annotated_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 1 dependent script(s) fail because of it
 src/broken_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 4 dependent script(s) fail because of it
@@ -30,6 +24,13 @@ src/probe.gd:41  warning  too-many-params  Function 'static_many' has 6 paramete
 src/probe.gd:45  warning  too-many-params  Function 'both_many' has 6 parameters (max 4)
 src/probe.gd:49  info  unused-parameter  Parameter 'never_a' is declared but never used
 src/probe.gd:53  info  unused-parameter  Parameter 'never_b' is declared but never used"
+`;
+
+exports[`fixtures directives 1`] = `
+"src/child_violating.gd:1  critical  sealed-violation  Cannot extend 'SealedBase' - class is marked as #@Sealed (defined in res://src/base.gd)
+src/strict.gd:1  critical  strict-limit  File exceeds strict limit (47/12)
+src/strict.gd:26  critical  strict-limit  Function 'over_the_strict_limit' exceeds strict limit (14/3)
+src/strict.gd:40  critical  strict-limit  Function 'under_global_over_strict' exceeds strict limit (5/2)"
 `;
 
 exports[`fixtures exports 1`] = `

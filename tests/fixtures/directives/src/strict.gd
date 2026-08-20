@@ -14,12 +14,12 @@ extends Node
 ## which is why the one above sits at the very top rather than beside this
 ## explanation.
 ##
-## And it is only consulted once the GLOBAL limit is already exceeded, because
-## the override is read from inside the branch that had already decided to
-## report. A value under the global limit and over the strict one is reported by
-## neither, which is the case a stricter limit exists for.
-## `under_global_over_strict` below pins that: it is silent today, and a fix
-## would show up here as a new finding rather than as nothing changing.
+## And it applies to values the global limits allow, which is the whole point of
+## it: a stricter limit is tighter than the global one by definition, so most of
+## what it forbids sits comfortably inside the global threshold.
+## `under_global_over_strict` below is that case. It was silent until the
+## override stopped being read from inside the branch that had already decided
+## to report something.
 
 
 # gdlint:strict-function:long-function=3
