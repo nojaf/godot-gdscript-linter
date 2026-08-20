@@ -48,6 +48,7 @@ code that triggers it. Start there rather than here.
 | `exports` | every shape of null guard, and where a Node's guard has to live |
 | `unused` | what keeps a function alive, including callers that are scene data rather than code |
 | `magic` | numbers that are code, against digits that are text or prose |
+| `style` | naming, text and body checks that need no threshold configured |
 
 ## What is asserted, and what is snapshotted
 

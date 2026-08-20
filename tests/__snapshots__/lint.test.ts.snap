@@ -1,8 +1,17 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures magic 1`] = `
-"src/probe.gd:44  info  magic-number  Magic number 37 (consider using a named constant)
-src/probe.gd:49  info  magic-number  Magic number 99 (consider using a named constant)"
+exports[`fixtures style 1`] = `
+"src/ascii.gd:10  warning  ascii-violation  Non-ASCII character found: U+2192
+src/ascii.gd:14  warning  ascii-violation  Non-ASCII character found: U+201C
+src/bodies.gd:7  info  empty-function  Function 'empty_stub' is empty or contains only 'pass'
+src/bodies.gd:13  warning  unused-variable  Variable 'never_read' is declared but never used
+src/naming.gd:1  warning  naming-class  Class name 'badly_Named_Class' should be PascalCase
+src/naming.gd:10  info  naming-function  Function 'BadlyNamedFunction' should be snake_case
+src/text.gd:6  info  todo-comment  TODO: this comment is what todo-comment looks for
+src/text.gd:7  info  commented-code  Commented-out code detected
+src/text.gd:8  info  commented-code  Commented-out code detected
+src/text.gd:12  info  long-line  Line exceeds 120 chars (135)
+src/text.gd:21  info  commented-code  Commented-out code detected"
 `;
 
 exports[`fixtures broken 1`] = `
@@ -42,6 +51,11 @@ exports[`fixtures ignores 1`] = `
 "src/probe.gd:21  warning  print-statement  Debug print statement: print("reported: no directive covers this")
 src/probe.gd:30  warning  print-statement  Debug print statement: print("reported: no directive covers this either")
 src/probe.gd:39  warning  print-statement  Debug print statement: print("reported: nothing closes a range but the next plain f"
+`;
+
+exports[`fixtures magic 1`] = `
+"src/probe.gd:44  info  magic-number  Magic number 37 (consider using a named constant)
+src/probe.gd:49  info  magic-number  Magic number 99 (consider using a named constant)"
 `;
 
 exports[`fixtures members 1`] = `

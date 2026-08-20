@@ -1,0 +1,3 @@
+# flags: --check naming-class,naming-function,todo-comment,commented-code,long-line,ascii-violation,empty-function,unused-variable
+# target: res://src
+# exit: 1
