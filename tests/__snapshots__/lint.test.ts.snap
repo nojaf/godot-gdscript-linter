@@ -1,17 +1,9 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures style 1`] = `
-"src/ascii.gd:10  warning  ascii-violation  Non-ASCII character found: U+2192
-src/ascii.gd:14  warning  ascii-violation  Non-ASCII character found: U+201C
-src/bodies.gd:7  info  empty-function  Function 'empty_stub' is empty or contains only 'pass'
-src/bodies.gd:13  warning  unused-variable  Variable 'never_read' is declared but never used
-src/naming.gd:1  warning  naming-class  Class name 'badly_Named_Class' should be PascalCase
-src/naming.gd:10  info  naming-function  Function 'BadlyNamedFunction' should be snake_case
-src/text.gd:6  info  todo-comment  TODO: this comment is what todo-comment looks for
-src/text.gd:7  info  commented-code  Commented-out code detected
-src/text.gd:8  info  commented-code  Commented-out code detected
-src/text.gd:12  info  long-line  Line exceeds 120 chars (135)
-src/text.gd:21  info  commented-code  Commented-out code detected"
+exports[`fixtures directives 1`] = `
+"src/child_violating.gd:1  critical  sealed-violation  Cannot extend 'SealedBase' - class is marked as #@Sealed (defined in res://src/base.gd)
+src/strict.gd:1  critical  strict-limit  File exceeds strict limit (47/12)
+src/strict.gd:26  critical  strict-limit  Function 'over_the_strict_limit' exceeds strict limit (14/3)"
 `;
 
 exports[`fixtures broken 1`] = `
@@ -53,6 +45,19 @@ src/probe.gd:30  warning  print-statement  Debug print statement: print("reporte
 src/probe.gd:39  warning  print-statement  Debug print statement: print("reported: nothing closes a range but the next plain f"
 `;
 
+exports[`fixtures limits 1`] = `
+"src/complex.gd:1  warning  file-length  File exceeds 20 lines (22)
+src/complex.gd:12  warning  high-complexity  Function 'branchy' has complexity 5 (warning at 3)
+src/complex.gd:12  warning  long-function  Function 'branchy' exceeds 6 lines (11)
+src/god.gd:1  warning  file-length  File exceeds 20 lines (24)
+src/god.gd:1  warning  god-class-functions  God class: 4 public functions (max 3)
+src/god.gd:1  warning  god-class-signals  God class: 3 signals (max 2)
+src/sizes.gd:1  critical  file-length  File exceeds 26 lines (31)
+src/sizes.gd:16  warning  long-function  Function 'too_long' exceeds 6 lines (10)
+src/sizes.gd:26  warning  deep-nesting  Function 'nested_too_deep' has 3 nesting levels (max 2)
+src/sizes.gd:26  warning  high-complexity  Function 'nested_too_deep' has complexity 4 (warning at 3)"
+`;
+
 exports[`fixtures magic 1`] = `
 "src/probe.gd:44  info  magic-number  Magic number 37 (consider using a named constant)
 src/probe.gd:49  info  magic-number  Magic number 99 (consider using a named constant)"
@@ -74,6 +79,20 @@ src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters
 src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
 src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
 src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
+`;
+
+exports[`fixtures style 1`] = `
+"src/ascii.gd:10  warning  ascii-violation  Non-ASCII character found: U+2192
+src/ascii.gd:14  warning  ascii-violation  Non-ASCII character found: U+201C
+src/bodies.gd:7  info  empty-function  Function 'empty_stub' is empty or contains only 'pass'
+src/bodies.gd:13  warning  unused-variable  Variable 'never_read' is declared but never used
+src/naming.gd:1  warning  naming-class  Class name 'badly_Named_Class' should be PascalCase
+src/naming.gd:10  info  naming-function  Function 'BadlyNamedFunction' should be snake_case
+src/text.gd:6  info  todo-comment  TODO: this comment is what todo-comment looks for
+src/text.gd:7  info  commented-code  Commented-out code detected
+src/text.gd:8  info  commented-code  Commented-out code detected
+src/text.gd:12  info  long-line  Line exceeds 120 chars (135)
+src/text.gd:21  info  commented-code  Commented-out code detected"
 `;
 
 exports[`fixtures unused 1`] = `

@@ -1,0 +1,9 @@
+{
+  "_comment": "Global limits lowered so the strict directives in src/strict.gd have something to tighten. See the comment in that file for why they need one at all.",
+  "limits": {
+    "file_lines_soft": 15,
+    "file_lines_hard": 60,
+    "function_lines": 10,
+    "function_lines_critical": 30
+  }
+}

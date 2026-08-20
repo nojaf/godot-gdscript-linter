@@ -1,0 +1,10 @@
+# A strict directive tightens an existing check rather than being one of its
+# own, so file-length and long-function have to be enabled for it to fire at
+# all. Filtering to just strict-limit reports nothing.
+#
+# limits.json lowers the global thresholds, because a strict limit is only
+# consulted once the global one is already exceeded.
+#
+# flags: --config res://limits.json --check sealed-violation,strict-limit,file-length,long-function
+# target: res://src
+# exit: 2

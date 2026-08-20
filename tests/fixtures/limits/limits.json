@@ -1,0 +1,14 @@
+{
+  "_comment": "Thresholds lowered so the fixture can stay small and readable. Testing file-length at its default of 200 would mean a 200-line fixture nobody reads.",
+  "limits": {
+    "file_lines_soft": 20,
+    "file_lines_hard": 26,
+    "function_lines": 6,
+    "function_lines_critical": 12,
+    "max_nesting": 2,
+    "cyclomatic_warning": 3,
+    "cyclomatic_critical": 6,
+    "god_class_functions": 3,
+    "god_class_signals": 2
+  }
+}

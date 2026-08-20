@@ -1,0 +1,3 @@
+# flags: --config res://limits.json --check file-length,long-function,deep-nesting,high-complexity,god-class
+# target: res://src
+# exit: 2

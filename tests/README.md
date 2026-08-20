@@ -49,6 +49,8 @@ code that triggers it. Start there rather than here.
 | `unused` | what keeps a function alive, including callers that are scene data rather than code |
 | `magic` | numbers that are code, against digits that are text or prose |
 | `style` | naming, text and body checks that need no threshold configured |
+| `limits` | the size and complexity thresholds, measured against a lowered `limits.json` |
+| `directives` | `#@Sealed`, and `gdlint:strict` including a case it silently misses |
 
 ## What is asserted, and what is snapshotted
 
@@ -98,7 +100,11 @@ KEEP_WORK=1 bun test -t members     # prints the temporary directory, leaves it
 2. Write the bad code under `src/`, and say in a comment there what should be
    reported and what should stay silent.
 3. Write `config` with the flags. Narrow it with `--check <ids>` so the
-   expectation is about the check under test rather than every style rule.
+   expectation is about the check under test rather than every style rule. If
+   the case needs a threshold, add a JSON file and point `--config res://<name>`
+   at it: `gdlint.json` is gitignored here, so a fixture cannot use that name.
+   Testing `file-length` at its default of 200 would otherwise mean a 200-line
+   fixture nobody reads.
 4. `bun test -t <name> -u` to record the findings, then **read them**. This is
    the step that decides what the test means.
 
