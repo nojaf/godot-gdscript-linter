@@ -67,7 +67,9 @@ how far each piece sits from something that could be.
 | `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Only with the binary |
 | `copy.sh`: install the addon into a project and generate a `lint.sh` wrapper | `9b672f3` | No, local workflow |
 | `GDLintSourceIndex`: take source structure from `gdscript-formatter index` rather than regular expressions | `acfe210`, `7371318` | No, adds a dependency |
-| `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers | `92a5aa3`, `bfcf2fe`, `af84866` | Yes |
+| `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers, and declarations wrapped across lines | `92a5aa3`, `bfcf2fe`, `af84866`, `26c88e2` | Yes |
+| `tests/`: a suite that fails when the checks break, covering every check id | `c08d29f`, `34951da`, `deff434`, `8f12f1c`, `3838295`, `749b13f` | Yes |
+| Fixes to inherited checks: magic numbers inside strings, strict limits below the global threshold | `3beef4f`, `f97597b` | Yes |
 
 Every check is behind its own opt-in flag and off by default. No existing output,
 exit code, config key or dock behavior changes. A user who does not pass the new
@@ -490,9 +492,11 @@ one.
 
 `bun test` runs the suite, and `tests/README.md` says how to run it, what it
 needs, and how to add a fixture. Unit assertions over the pure functions execute
-inside Godot; four fixture projects each carry a `config` naming the flags to run
-and a snapshot holding their findings. About ten seconds for all of it, and
-`bun test --watch` while working on a checker.
+inside Godot; eleven fixture projects each carry a `config` naming the flags to
+run and a snapshot holding their findings. Under thirty seconds for all of it,
+and `bun test --watch` while working on a checker.
+
+Every check the linter can emit is covered by a fixture.
 
 The split between what is snapshotted and what is asserted is the design. The
 invariants are explicit and never generated: the exit code, stderr free of
@@ -508,10 +512,12 @@ reports which findings appeared, disappeared or changed wording, quoting the
 fixture line each one points at, along with the flags it ran and how to accept
 or inspect the result.
 
-Each fixture pins a bug this project shipped: annotated and `static` declarations
-being skipped, an ignore directive suppressing a function it does not name, a
-cascade of load failures folding into its root cause, and the wide-declaration
-fold together with the three cases that must not fold.
+The first fixtures each pinned a bug this project shipped: annotated and `static`
+declarations being skipped, an ignore directive suppressing a function it does
+not name, a cascade of load failures folding into its root cause, and the
+wide-declaration fold together with the three cases that must not fold. The rest
+went in to cover the checks inherited from upstream, which are the ones a rebase
+is most likely to disturb and the ones nothing would have noticed breaking.
 
 Two rules hold the suite up. Every fixture expects a non-zero number of findings,
 and a run producing none fails outright, because an expectation of "nothing"
@@ -519,10 +525,32 @@ passes just as well when the check is broken. And stderr is asserted free of
 `SCRIPT ERROR`, because that is where a throw goes while the report still looks
 clean.
 
-The suite was checked for teeth by reintroducing three real bugs one at a time.
-Each fails exactly one fixture and no others. It then earned that immediately:
+The suite was checked for teeth by reintroducing real bugs one at a time. Each
+fails exactly one fixture and no others. It then earned that immediately:
 splitting `member-check.gd` broke three separate ways, and every one produced a
 run that exited 0 with no findings.
+
+Mutation testing is also how the gaps get found. Dropping `connect` from the
+method-name list changed nothing, because that fixture exercised three of its
+fourteen entries. Restricting commented-code detection to column zero changed
+nothing either, because the check only ever sees the trimmed line and those
+clauses are unreachable.
+
+### Three checker bugs it has paid for so far
+
+`missing-return-type` reported a wrapped signature as untyped, because a
+declaration was read from its first line only. The same cause meant
+`too-many-params` could never fire on one and `unused-parameter` found no
+parameters to check: one cause, three defects, two of them silent.
+
+`magic-number` reported the `6` in `"%6.2f  %s"`. It meant to skip strings and
+looked at the single character before the digit, which skips `"6 things"` and
+nothing else. Reported from a real project rather than found here.
+
+`gdlint:strict` could only fire when the global limit was already exceeded,
+which is the one case a stricter limit is not for. The fixture was committed
+with that case silent and documented as silent, so the fix arrived as a finding
+appearing rather than as nothing changing.
 
 The fixtures came out of the older habit described below, which is what the suite
 replaces.
