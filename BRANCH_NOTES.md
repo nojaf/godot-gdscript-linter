@@ -1,35 +1,36 @@
 # Branch notes — `nojaf`
 
-This branch collects several additions to `graydwarf/godot-gdscript-linter`. It is
-a fork branch, kept as one piece so the work can be read in context. It is not a
-pull request, and nothing here is meant to land as-is.
+This branch collects several additions to `graydwarf/godot-gdscript-linter`. It
+started as work to offer upstream. It is not that any more, and this file was
+rewritten to say so.
 
-I wrote this file for the maintainer. It states what each change does, why I think
-the linter is the right place for it, and what it costs. The table below marks
-which changes are offered upstream. The `copy.sh` tooling is local to my workflow
-and is not.
+**This file is for us.** It records what each change does, why the linter is the
+right place for it, and what it costs, so the reasoning survives being months
+old. Two things still depend on it. Reapplying this work on a newer upstream
+means knowing which of their files we touch and why, which is below. And if the
+upstream conversation is ever worth reopening, this is the document that would
+make it possible, so it is written to stay legible to someone who has never seen
+the branch.
 
-Branch point: `aeeae7d`, the tip of `main` at the time.
+Branch point: `aeeae7d`, the tip of upstream `main` at the time.
 
-## Disclosure: this was written by an AI agent
+## Written by an AI agent
 
 Claude (Anthropic's coding agent) wrote all of the code on this branch, the
 fixture projects, the documentation, and this file. Every commit carries a
 `Co-Authored-By: Claude` trailer.
 
-My role was product owner, not implementer. I said what I wanted. I supplied
-the bugs from my own game project that motivated each check. I set constraints,
+My role was product owner, not implementer. I said what I wanted. I supplied the
+bugs from my own game project that motivated each check. I set constraints,
 rejected designs I did not like, and approved what shipped. I did not write the
 implementation.
 
-I am stating this plainly because it changes how you should review it. Treat
-this as code from a contributor whose reasoning you cannot interrogate
-directly. This file documents each design decision, so you can judge it on the
-merits rather than on trust. I also checked every claim about engine behavior
-against Godot.
-
-You can also decide that this project does not accept AI-written code. That is
-a reasonable position. I would rather hear it now than after a pull request.
+This is recorded rather than buried because it changes how the branch should be
+read: as code from a contributor whose reasoning cannot be interrogated directly.
+Hence the design decisions written down throughout, and hence every claim about
+engine behaviour being checked against Godot rather than reasoned about. If this
+ever goes to the maintainer, they get to decide whether the project accepts
+AI-written code at all, and that is a reasonable thing for them to refuse.
 
 ## How to try it
 
@@ -54,34 +55,40 @@ checking less, because reporting nothing looks exactly like a clean project.
 
 ## What is here
 
-| Change | Commits | Offered upstream |
+The last column is a judgment about each change on its own merits, kept from when
+this was aimed upstream. It no longer means anything is going to be offered, only
+how far each piece sits from something that could be.
+
+| Change | Commits | Could stand alone upstream |
 |--------|---------|------------------|
 | `--sarif`: SARIF 2.1.0 output, plus `--spaces` and `--output` for machine formats | `9b0d139`, `e7a2f8d` | Yes |
-| `--check-members`: verify member access, signal emit arity, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Yes |
-| `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Yes |
-| `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Yes |
+| `--check-members`: verify member access, signal emit arity, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Only with the binary |
+| `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Only with the binary |
+| `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Only with the binary |
 | `copy.sh`: install the addon into a project and generate a `lint.sh` wrapper | `9b672f3` | No, local workflow |
 | `GDLintSourceIndex`: take source structure from `gdscript-formatter index` rather than regular expressions | `acfe210`, `7371318` | No, adds a dependency |
-| `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers | `92a5aa3`, `bfcf2fe` | Yes |
+| `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers | `92a5aa3`, `bfcf2fe`, `af84866` | Yes |
 
 Every check is behind its own opt-in flag and off by default. No existing output,
 exit code, config key or dock behavior changes. A user who does not pass the new
-flags sees exactly what they saw before.
+flags sees exactly what they saw before. That discipline is worth keeping now for
+a different reason than the one it was adopted for: it is what makes reapplying
+this branch on a newer upstream a mechanical job rather than a merge.
 
-**The external binary changes the upstream story.** The three checks were written
-against regular expressions first and later moved onto the index, which removed 26
-regular expressions and fixed several classes of bug. That move also made them
-depend on a Rust binary, which is not something this project should carry. Offering
-any of them upstream means either restoring a text-based implementation, which
-reintroduces the bugs listed above, or upstream accepting the dependency. That
-question is open and worth settling before writing a pull request.
+**The external binary is what settled it.** The three checks were written against
+regular expressions first and later moved onto the index, which removed 26 regular
+expressions and fixed several classes of bug. That move also made them depend on a
+Rust binary, which is not something the upstream project should carry. The only
+ways to offer them were to restore a text implementation, reintroducing the bugs,
+or to ask upstream to accept the dependency. Neither is worth doing, which is most
+of why the branch stays a fork.
 
 `GDLintDeclarationSyntax` is the exception and stands alone. It fixes existing
 checkers, needs no binary, and matches what was reported in upstream issue #15.
+If any single piece here ever moves, it is that one.
 
-The checks are CLI-only. None of them appear in the editor dock, because I
-develop this project from an external editor and never open the dock. Wiring them
-into the dock is work I have not done.
+The checks are CLI-only. None of them appear in the editor dock, because this
+project is developed from an external editor and the dock never gets opened.
 
 ## Why these checks exist
 
@@ -315,7 +322,7 @@ and `@warning_ignore(...) static`, and all six untyped variable forms report whi
 all three typed ones stay silent. The addon is unchanged at 618 findings and a
 game project at 23, neither with a `SCRIPT ERROR`.
 
-### The ignore directive, and why upstream has not been told
+### The ignore directive, still unreported upstream
 
 A `# gdlint:ignore-function` above an annotated or `static` function does worse
 than fail. `_find_function_range` scans forward for the next line starting with
@@ -326,10 +333,12 @@ no directive mentions is silenced. Nothing closes the range but another plain
 `func`, so if what follows is annotated or `static`, it runs to the end of the
 file and takes those with it.
 
-I drafted a comment saying so and decided not to post it. This branch already
-fixes it, through the same helper, and all three shapes were rechecked here to
-confirm that. If any of this goes upstream it goes as a change, not as more
-description of a bug that is already filed.
+A comment saying so was drafted for issue #15 and not posted, before the wider
+decision to leave upstream alone. It is worth knowing that this detail is not on
+the issue, in case the conversation is ever reopened: what was filed describes a
+directive that fails to bind, not one that binds to the wrong function. This
+branch fixes both through the same helper, and all three shapes were rechecked
+here to confirm it.
 
 ---
 
@@ -479,15 +488,14 @@ produce identical output, so both directions have to be proven.
 
 Nothing here is blocking. Ordered by how ready each is to pick up.
 
-1. **Decide the upstream story for the three checks.** They now depend on the
-   `gdscript-formatter` binary, which this project should not carry. Offering any
-   of them means restoring a text implementation, which reintroduces the bugs
-   listed above, or upstream accepting the dependency. `GDLintDeclarationSyntax`
-   is unaffected and can be offered on its own.
+1. **Rebase onto a newer upstream, every few months.** The surface is nine
+   modified files, seven of them one-line swaps to `GDLintDeclarationSyntax`. See
+   "The rebase surface" below for the list and for how far upstream has moved.
+   Nothing to do while it stays one unrelated commit ahead.
 
 2. **The editor dock still does not know about any of this.** All three checks are
    CLI-only, by choice, because this project is developed from an external editor.
-   Anyone wanting them in the dock has that work ahead.
+   Wiring them into the dock is work nobody has done.
 
 3. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
    producer keeps it there across incompatible changes on purpose. Recheck after
@@ -495,18 +503,49 @@ Nothing here is blocking. Ordered by how ready each is to pick up.
    checks read, diff findings against a saved baseline, confirm stderr has no
    `SCRIPT ERROR`.
 
-## What I would like
+## Where this is going
 
-I am not asking for a merge of this branch. If any of the checks look worth having, I will open one pull request per check
-against `main`. Each would exclude the `copy.sh` tooling and include the
-changes you ask for. I would rather agree on
-the shape before writing that.
+**Not to the maintainer.** The branch has drifted too far to arrive as a
+contribution: three of the checks need an external Rust binary, the checks are
+CLI-only by choice, and `copy.sh` is a local workflow. Offering any of it would
+mean a conversation about the dependency before a line of it could land. That
+conversation is not happening, and pretending otherwise was shaping this document
+badly. Two issues were filed upstream before that decision and stand on their
+own: #15 on annotated declarations being skipped, and #14 on `file-length`
+counting comments and blank lines.
 
-That includes agreeing on whether you want AI-written contributions here at all.
-See the disclosure at the top.
+**Staying on our own fork, rebased occasionally.** The expectation is to reapply
+this work on a newer upstream every few months rather than to merge it anywhere.
+That makes the divergence surface the thing to keep small and known, so it is
+recorded here.
 
-I also opened issue #14 about `file-length` counting comments and blank lines,
-which is unrelated to this branch.
+### The rebase surface
+
+Nine upstream files are modified. Everything else we own outright, and a rebase
+cannot conflict with it:
+
+| Upstream file | What we changed |
+|---------------|-----------------|
+| `analyzer/analyze-cli.gd` | new flags, index construction, the three check entry points |
+| `analyzer/checkers/function-checker.gd` | `GDLintDeclarationSyntax`, parameter counting |
+| `analyzer/checkers/naming-checker.gd` | `GDLintDeclarationSyntax` |
+| `analyzer/checkers/style-checker.gd` | `GDLintDeclarationSyntax`, the type-hint test |
+| `analyzer/checkers/unused-checker.gd` | `GDLintDeclarationSyntax`, parameter extraction |
+| `analyzer/code-analyzer.gd` | `GDLintDeclarationSyntax` |
+| `analyzer/ignore-handler.gd` | `GDLintDeclarationSyntax` |
+| `analyzer/strict-handler.gd` | `GDLintDeclarationSyntax` |
+| `docs/CLI.md` | documents the new flags |
+
+Seven of the nine are one-line-per-site swaps to `GDLintDeclarationSyntax`, which
+makes them cheap to reapply and easy to spot if upstream rewrites the same lines.
+`analyze-cli.gd` is the only one with real surgery in it. Files we add, and which
+no rebase touches: `source-index.gd`, `member-check.gd`, `unused-function-check.gd`,
+`export-check.gd`, `declaration-syntax.gd`, `copy.sh`,
+`scripts/validate_sarif.py`, and this file.
+
+As of the last rebase check, upstream `main` is one commit ahead of our branch
+point (`e45b640`), and it adds a `project.json` we do not touch. Nothing to do
+yet.
 
 User-facing documentation for everything here is in
 `addons/gdscript-linter/docs/CLI.md`.
