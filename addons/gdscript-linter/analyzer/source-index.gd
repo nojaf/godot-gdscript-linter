@@ -7,9 +7,10 @@ extends RefCounted
 ##
 ## The engine answers what things MEAN: members, inherited members, declared
 ## types, arity, which exports can be null, which methods are engine virtuals.
-## It cannot say where any of it is written. This supplies the other half:
+## It cannot say where any of it is written, and it cannot say anything at all
+## about a script that does not compile. This supplies the other half:
 ## declarations, references, member chains, string literals, comparisons and
-## comments, each with a source range.
+## comments, each with a source range, plus what each file extends.
 ##
 ## Everything here used to be regular expressions over lines, and every bug found
 ## in those checks came from that. Annotations in front of a declaration, locals
@@ -98,6 +99,7 @@ func _start_file(header: Dictionary) -> Dictionary:
 	var entry := {
 		"path": path,
 		"parse_error": bool(header.get("parse_error", false)),
+		"extends": String(header.get("extends", "")),
 		"declarations": [],
 		"references": [],
 		"member_chains": [],
@@ -158,6 +160,18 @@ func file_records(path: String) -> Dictionary:
 	if not normalized.begins_with("res://"):
 		normalized = "res://" + normalized.lstrip("/")
 	return files.get(normalized, {})
+
+
+## What a file's own script extends, or "". The header holds the base as written,
+## so `extends "res://enemy.gd"` arrives with its quotes; they are taken off here
+## because every caller wants the path.
+##
+## This is the one source that still answers when a script does not compile. The
+## engine has no base script to hand back in that case, which is exactly when the
+## answer is needed: to fold a cascade of failures into the one script that broke.
+func file_extends(path: String) -> String:
+	var written := String(file_records(path).get("extends", ""))
+	return written.trim_prefix("\"").trim_suffix("\"")
 
 
 ## The line a record starts on, one-based, matching what issues report.

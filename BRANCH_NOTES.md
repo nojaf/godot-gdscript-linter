@@ -289,8 +289,8 @@ main thing to understand before changing any check.
 `gdscript-formatter index` knows where everything is written: declarations with
 their annotations and modifiers, member chains with a `kind` per segment, argument
 lists, string literals with the call they are an argument of, comparisons,
-comments, each with a range and a dotted `scope` such as `Inner._ready`. It knows
-nothing about types.
+comments, each with a range and a dotted `scope` such as `Inner._ready`, and what
+each file extends. It knows nothing about types.
 
 The Godot engine knows what things mean: every member of a class including
 inherited ones, declared types, signal arity, which exports can hold null, which
@@ -300,6 +300,12 @@ line number.
 A check joins the two. `unknown-member` needs the member set from the engine and
 the chain position from the index. Neither half alone is enough, and the half that
 used to be faked with regular expressions is where every bug came from.
+
+The split is not always this clean. A script that fails to compile has structure
+and no meaning at all: the engine cannot say what it extends, or what it is
+called, because there is no compiled script to ask. `script-load-failed` reads the
+base from the index for that reason, and the class name from the project's global
+class list, which the engine keeps whether or not the script compiles.
 
 Design and open requirements for the index live in the formatter fork at
 `docs/specification_index.md`.
@@ -335,13 +341,38 @@ assert the fields the checks read, diff findings against a saved baseline, and
 confirm stderr is free of `SCRIPT ERROR`. That was done for both requirement 7 and
 requirement 8, and both came back identical.
 
-**The work this unlocks, not yet done.** `member-check.gd` still carries its last
-two regular expressions, `_declared_class_name` and `_declared_base`, used only to
-fold cascading load failures into their root cause. The index can answer both now,
-and it parses scripts that Godot cannot compile, which is exactly when they are
-needed. One catch: `GDLintSourceIndex._start_file` currently keeps only `path`,
-`parse_error` and the record buckets, so it drops the header's `extends`. That
-field has to be carried into the entry before the regular expressions can go.
+**What that unlocked.** `member-check.gd` has no regular expressions left in it.
+The last two, `_declared_class_name` and `_declared_base`, folded cascading load
+failures into their root cause, and both are gone.
+
+`_declared_base` was the straightforward half. `GDLintSourceIndex._start_file`
+now keeps the header's `extends`, and `file_extends()` hands it back with the
+quotes taken off an `extends "res://enemy.gd"`. That alone fixed a bug. The old
+pattern matched the first `extends` anywhere in the file, comments and strings
+included, so a script that mentioned the word above its real header line was
+reported as its own root cause instead of being folded into the script that
+actually broke.
+
+`_declared_class_name` could not come from the index, and this is the part of
+requirement 7 that did not land. `class_name Foo` and a file-level `class Foo`
+both arrive as `kind: "class"` with `scope: ""`, and no field separates them, so
+asking the index which name the file declares has no reliable answer. The engine
+has one: `ProjectSettings.get_global_class_list()` still lists the class name of
+a script that fails to compile, which was the whole reason for reading text here.
+That map was already being built a few lines above, as `_global_classes`, and is
+now what the fold reads.
+
+The trade is worth writing down. The global class list comes from the import
+cache, so a `class_name` added since the last `--import` is not in it, and the
+fold then reports each failure separately. Noisier, never wrong. The text scan
+read the current file and had no such gap, but it also counted `class_name` in a
+comment.
+
+Verified the usual way. A fixture project of cascading failures produces the same
+findings except the comment case above, which is the intended fix and moves one
+root cause from four dependents to five. This addon and a second real project run
+all three checks with identical findings, including that project's five
+pre-existing load failures, and no new `SCRIPT ERROR` on either.
 
 ## Testing
 
@@ -374,13 +405,15 @@ produce identical output, so both directions have to be proven.
 
 Nothing here is blocking. Ordered by how ready each is to pick up.
 
-1. **Drop the last two regular expressions in `member-check.gd`.**
-   `_declared_class_name` and `_declared_base` fold cascading load failures into
-   their root cause. The index answers both now, and it parses scripts Godot
-   cannot compile, which is exactly when they are needed. First carry the `file`
-   record's `extends` into the per-file entry: `GDLintSourceIndex._start_file`
-   keeps only `path`, `parse_error` and the record buckets, so it currently
-   discards it.
+1. **Ask the index to tell a `class_name` apart from an inner `class`.** Both
+   arrive as `kind: "class"` with `scope: ""`, and nothing on the record says
+   which is which, so the index cannot answer which name a file declares.
+   Requirement 7 was filed to retire the consumer's text scan for `class_name`
+   and `extends`; it settled `extends` and left this half. Nothing is blocked by
+   it, because the name now comes from the engine's global class list instead,
+   and that is arguably the better source anyway. A marker on the record, or a
+   separate `kind`, would close it. Worth filing as requirement 9 on the
+   formatter.
 
 2. **Add the over-suppression detail to upstream issue #15.** The issue reports
    that `gdlint:ignore-function` fails to bind above an annotated or `static`

@@ -5,9 +5,9 @@ extends RefCounted
 ## Verifies that member access resolves, by joining two sources.
 ##
 ## GDLintSourceIndex says where things are written: member chains with their
-## segments, whether each segment is a call, argument counts, and the scope each
-## sits in. The engine says what things mean: every member of a type including
-## inherited ones, declared types, and signal arity.
+## segments, whether each segment is a call, argument counts, the scope each sits
+## in, and what each file extends. The engine says what things mean: every member
+## of a type including inherited ones, declared types, and signal arity.
 ##
 ## Four findings, all CRITICAL:
 ##   script-load-failed   - the script does not compile, so nothing in it can be
@@ -64,7 +64,7 @@ func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = 
 			scripts[path] = script
 
 	var issues: Array = []
-	issues.append_array(_report_load_failures(broken, scripts))
+	issues.append_array(_report_load_failures(index, broken))
 
 	for path: String in file_paths:
 		if scripts[path] == null:
@@ -83,21 +83,22 @@ func _build_global_class_map() -> void:
 
 # A broken base script breaks everything extending it. Report the root cause and
 # fold the dependents into its message rather than listing every consequence.
-func _report_load_failures(broken: Array, scripts: Dictionary) -> Array:
-	var class_to_path := {}
-	for path: String in scripts.keys():
-		var declared := _declared_class_name(path)
-		if not declared.is_empty():
-			class_to_path[declared] = path
-
+#
+# Neither half can come from the engine alone. A script that does not compile has
+# no base script to ask for, so what it extends is read from the index, which
+# parses it anyway: these failures are semantic, not syntactic. Turning that base
+# into a path needs the project's global class list, which the engine keeps
+# whether or not a script compiles, and which covers the whole project rather
+# than only the paths being analyzed.
+func _report_load_failures(index: GDLintSourceIndex, broken: Array) -> Array:
 	var caused_by := {}
 	for path: String in broken:
-		var base := _declared_base(path)
+		var base := index.file_extends(path)
 		if base.is_empty():
 			continue
 		var base_path := ""
-		if class_to_path.has(base):
-			base_path = class_to_path[base]
+		if _global_classes.has(base):
+			base_path = _global_classes[base]
 		elif base.begins_with("res://"):
 			base_path = base
 		if base_path != path and broken.has(base_path):
@@ -387,30 +388,6 @@ func _closest_member(name: String, names: Dictionary) -> String:
 			best_score = score
 			best = String(candidate)
 	return best
-
-
-# The only text scanning left here. Used solely on scripts that failed to load,
-# to fold cascading failures into their root cause. A script that does not
-# compile has no base script to ask the engine for, and the index does not yet
-# name the base on a class declaration (requirement 7 in the formatter spec).
-func _declared_class_name(path: String) -> String:
-	var declaration := RegEx.new()
-	declaration.compile("^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*class_name\\s+([A-Za-z_][A-Za-z0-9_]*)")
-	for line in _read_lines(path):
-		var found := declaration.search(String(line))
-		if found != null:
-			return found.get_string(1)
-	return ""
-
-
-func _declared_base(path: String) -> String:
-	var declaration := RegEx.new()
-	declaration.compile("(?:^|\\s)extends\\s+(\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_.]*)")
-	for line in _read_lines(path):
-		var found := declaration.search(String(line))
-		if found != null:
-			return found.get_string(1).replace("\"", "")
-	return ""
 
 
 func _script_label(path: String, script: Script) -> String:
