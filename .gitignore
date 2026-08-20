@@ -34,3 +34,6 @@ local-docs/
 
 # Benchmark test files
 temp/
+
+# Test work dirs
+tests/**/.godot/

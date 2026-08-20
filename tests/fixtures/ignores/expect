@@ -1,0 +1,6 @@
+# flags: --check print-statement
+# target: res://src
+# exit: 1
+src/probe.gd:10 print-statement
+src/probe.gd:19 print-statement
+src/probe.gd:28 print-statement

@@ -1,0 +1,22 @@
+# --check-members: what it reports, and just as importantly what it declines to.
+#
+# Narrowed with --check so the expectation is about member resolution only. The
+# style checks would otherwise add a dozen findings with nothing to do with what
+# this fixture is for.
+#
+# Absent on purpose, and each one is a rule worth breaking loudly:
+#   :18 :19 :20  reads through the wide `settings` fold into :5, not one each
+#   :23          self.clock.text resolves
+#   :24          self.title is inherited from FoldBasePanel
+#   :25          self.untyped_thing.whatever has no declared type to check
+#   :30          label there is a local shadowing the member of the same name
+#
+# flags: --check-members --check unknown-member,wrong-argument-count,method-not-called,script-load-failed
+# target: res://src
+# exit: 2
+src/probe.gd:5 unknown-member ~ FoldSettings has all of them
+src/probe.gd:17 unknown-member ~ did you mean 'clock'?
+src/probe.gd:21 unknown-member ~ 'txt' is not a member of Label
+src/probe.gd:22 unknown-member ~ did you mean 'text'?
+src/probe.gd:26 wrong-argument-count ~ expected 1
+src/probe.gd:27 method-not-called ~ always true
