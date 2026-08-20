@@ -86,6 +86,13 @@ async function findFormatter(): Promise<string> {
 const GODOT = findGodot();
 process.env.GDLINT_FORMATTER = await findFormatter();
 
+// Said out loud because both are variables the results depend on, and neither
+// is obvious: the Godot picked up from PATH may not be the one you develop
+// against, and the formatter is rebuilt from a sibling checkout on every run.
+const version = (await $`${GODOT} --version`.quiet().nothrow()).text().trim();
+console.log(`godot     ${GODOT} (${version})`);
+console.log(`formatter ${process.env.GDLINT_FORMATTER}`);
+
 type Config = {
   flags: string[];
   target: string;
@@ -285,16 +292,41 @@ describe("unit", () => {
   test(
     "pure functions",
     async () => {
+      // The class_name globals the assertions use only resolve once Godot has
+      // imported the project, and a fresh clone has not. Without this the script
+      // fails to load, Godot exits 0 anyway, and the test passes having run
+      // nothing at all.
+      if (!existsSync(join(REPO, ".godot"))) {
+        await $`${GODOT} --headless --path ${REPO} --import`.quiet().nothrow();
+      }
+
       const result =
         await $`${GODOT} --headless --path ${REPO} --script res://tests/unit/run.gd`.quiet().nothrow();
-      if (result.exitCode !== 0) {
+      const stderr = result.stderr.toString();
+
+      // Exit code is not evidence. Godot exits 0 when a script fails to load, so
+      // the run has to say how much of it happened.
+      const ran = result.text().match(/^unit: (\d+) assertions, (\d+) failed$/m);
+      if (!ran) {
         throw new Error(
-          `tests/unit/run.gd reported failures:\n${result.stderr.toString()}\n` +
-            `  each line above is one assertion, with what it expected and what it got`,
+          `tests/unit/run.gd never reported a total, so nothing was verified.\n` +
+            `  exit code ${result.exitCode}, which Godot returns even when the script\n` +
+            `  fails to load. Usually a parse error or a missing class_name.\n` +
+            `  stdout:\n${result.text() || "    (empty)"}\n  stderr:\n${stderr || "    (empty)"}`,
         );
       }
+
+      const [, total, failed] = ran;
+      if (Number(failed) > 0) {
+        throw new Error(
+          `${failed} of ${total} unit assertions failed:\n${stderr}\n` +
+            `  each block above is one assertion, with what it expected and what it got`,
+        );
+      }
+      expect(Number(total)).toBeGreaterThan(0);
+      expect(stderr).not.toContain("SCRIPT ERROR");
     },
-    MINUTE,
+    2 * MINUTE,
   );
 });
 

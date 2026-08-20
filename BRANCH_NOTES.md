@@ -488,10 +488,11 @@ one.
 
 ## Testing
 
-`bun test` runs the suite: unit assertions over the pure functions, executed
-inside Godot, and four fixture projects, each with a `config` naming the flags
-to run and a snapshot holding its findings. About nine seconds for all of it,
-and `bun test --watch` while working on a checker.
+`bun test` runs the suite, and `tests/README.md` says how to run it, what it
+needs, and how to add a fixture. Unit assertions over the pure functions execute
+inside Godot; four fixture projects each carry a `config` naming the flags to run
+and a snapshot holding their findings. About ten seconds for all of it, and
+`bun test --watch` while working on a checker.
 
 The split between what is snapshotted and what is asserted is the design. The
 invariants are explicit and never generated: the exit code, stderr free of

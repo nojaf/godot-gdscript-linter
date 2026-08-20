@@ -9,19 +9,21 @@ extends SceneTree
 ## regression in it has been silent. A declaration it fails to recognise is not
 ## reported as an error, it is simply never checked.
 
+var _checked := 0
 var _failures := 0
 
 
 func _init() -> void:
 	_declaration_syntax()
-	if _failures > 0:
-		printerr("%d assertion(s) failed" % _failures)
-		quit(1)
-		return
-	quit(0)
+	# Printed so the caller can tell "everything passed" from "nothing ran".
+	# Godot exits 0 when a script fails to load at all, so an exit code is not
+	# evidence that any of this executed.
+	print("unit: %d assertions, %d failed" % [_checked, _failures])
+	quit(1 if _failures > 0 else 0)
 
 
 func _check(actual, expected, label: String) -> void:
+	_checked += 1
 	if actual != expected:
 		_failures += 1
 		printerr("  %s\n    expected: %s\n    actual:   %s" % [label, expected, actual])
