@@ -169,10 +169,39 @@ shadow it.
 
 ### Deliberate design decisions
 
-**A declared base type that is too wide is reported.** `var widget: Node` holding a
-`Label`, then `self.widget.text`, is reported even though it runs. The declaration
-is either missing a cast or wider than what it holds. Both fixes keep the check
-working against the narrower type.
+**A declared base type that is too wide is reported, once.** `var widget: Node`
+holding a `Label`, then `self.widget.text`, is reported even though it runs: the
+declaration is either missing a cast or wider than what it holds, and both fixes
+keep the check working against the narrower type.
+
+Reported per access, this drowns everything else. The addon's own source produced
+95 CRITICAL findings from four declarations, none of which can fail at runtime,
+and two of which carry the real type in a comment beside the wide annotation.
+That is the check burying the bug it exists to find.
+
+So findings for members read *through* another member's declared type are held
+back and grouped by that member. The rule for what happens next is evidence, not
+a threshold: every project class deriving from the declared type is scored by how
+many of the unknown members it has, and the group folds only when exactly one
+class has **all** of them. Then the object demonstrably holds something the
+declaration failed to name, so one WARNING is reported at the declaration, naming
+the class to narrow to. The 95 became 4.
+
+```
+dock.gd:88: 'settings_manager' is declared as RefCounted, but 27 members are read
+            from it that RefCounted does not have (claude_code_command,
+            claude_code_enabled, claude_custom_instructions, and 24 more).
+            GDLintSettingsManager has all of them: narrow the declaration to it,
+            or cast at the use sites.
+```
+
+Everything else stays exactly as it was, at CRITICAL, on its own line. A member
+read off the script's own type is never folded, because a script's own type is
+never too wide, which is what keeps `self.clock_labl` loud. Neither is a group
+that no class explains: two misspellings on one correctly typed variable are two
+bugs that happen to share a variable, not evidence of anything. And a lone
+unknown member cannot be told apart from a typo at all, so it stays CRITICAL and
+merely mentions the candidate type if one exists.
 
 **Method call arity is not checked.** Godot's own parser rejects `self.foo(1)`,
 bare `foo(1)` and `self.typed_member.foo(1)` with "Too few arguments", and that
