@@ -1,6 +1,19 @@
+# A gdlint:ignore-function directive must suppress the function it names, and
+# only that one.
+#
+# Upstream this is inverted for the first two pairs. The range is found by
+# scanning for a line starting with `func `, so an annotated or `static`
+# declaration is skipped, the search lands on the next plain function, and the
+# directive silences a function it never named while reporting the one it did.
+#
+# Suppressed, each named by the directive above it:
+#   :6   through @rpc("any_peer")
+#   :15  through static
+#   :24  plain, the case that always worked
+#
 # flags: --check print-statement
 # target: res://src
 # exit: 1
-src/probe.gd:10 print-statement
-src/probe.gd:19 print-statement
-src/probe.gd:28 print-statement
+src/probe.gd:10 print-statement ~ reported: no directive covers this
+src/probe.gd:19 print-statement ~ reported: no directive covers this either
+src/probe.gd:28 print-statement ~ nothing closes a range

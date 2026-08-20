@@ -488,7 +488,31 @@ one.
 
 ## Testing
 
-This repository has no test suite, so I built fixture projects instead. They cover
+`bun test` runs the suite: unit assertions over the pure functions, executed
+inside Godot, and four fixture projects that are linted and compared against an
+`expect` file. About eight seconds for all of it, and `bun test --watch` while
+working on a checker.
+
+Each fixture pins a bug this project shipped: annotated and `static` declarations
+being skipped, an ignore directive suppressing a function it does not name, a
+cascade of load failures folding into its root cause, and the wide-declaration
+fold together with the three cases that must not fold.
+
+Two rules hold the suite up. Every fixture expects a non-zero number of findings,
+and a run producing none fails outright, because an expectation of "nothing"
+passes just as well when the check is broken. And stderr is asserted free of
+`SCRIPT ERROR`, because that is where a throw goes while the report still looks
+clean.
+
+The suite was checked for teeth by reintroducing three real bugs one at a time.
+Each fails exactly one fixture and no others. It then earned that immediately:
+splitting `member-check.gd` broke three separate ways, and every one produced a
+run that exited 0 with no findings.
+
+The fixtures came out of the older habit described below, which is what the suite
+replaces.
+
+This repository had no test suite, so I built fixture projects instead. They cover
 each way a construct can legitimately appear: inheritance chains, native and
 script-class types, string-based and editor-wired references, binary resources,
 multi-line argument lists, and the ignore directives. Each check also runs against
