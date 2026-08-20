@@ -44,6 +44,7 @@ code that triggers it. Start there rather than here.
 | `ignores` | an ignore directive suppressing a function it does not name |
 | `broken` | a cascade of load failures folding into the script that broke |
 | `members` | the wide-declaration fold, and the three cases that must not fold |
+| `signatures` | a declaration wrapped across lines being read from its first line only |
 
 ## What is asserted, and what is snapshotted
 
