@@ -1,0 +1,3 @@
+# flags: --check magic-number
+# target: res://src
+# exit: 0

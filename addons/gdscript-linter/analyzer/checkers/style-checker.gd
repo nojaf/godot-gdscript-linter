@@ -95,6 +95,39 @@ func _extract_string_arg(line: String) -> String:
 
 
 # Returns issue dictionary or null
+## A line with the contents of its string literals blanked out and any trailing
+## comment removed, so only code is left. Positions are preserved, since blanking
+## replaces each character rather than deleting it.
+##
+## A digit inside a string is text and a digit inside a comment is prose. Neither
+## is a number the program uses, and reporting one asks the reader to replace a
+## format specifier with a named constant.
+static func code_only(text: String) -> String:
+	var out := ""
+	var quote := ""
+	var i := 0
+	while i < text.length():
+		var character := text[i]
+		if not quote.is_empty():
+			if character == "\\" and i + 1 < text.length():
+				out += "  "  # an escaped character cannot close the string
+				i += 1
+			elif character == quote:
+				out += character  # both quotes stay, so the string is still visible
+				quote = ""
+			else:
+				out += " "
+		elif character == "\"" or character == "'":
+			quote = character
+			out += character  # the quote itself stays, so positions still line up
+		elif character == "#":
+			break  # a comment runs to the end of the line
+		else:
+			out += character
+		i += 1
+	return out
+
+
 func check_magic_numbers(line: String, line_num: int) -> Variant:
 	# Skip comments, const declarations, and common safe patterns
 	if line.begins_with("#") or GDLintDeclarationSyntax.declares(line, "const"):
@@ -102,20 +135,20 @@ func check_magic_numbers(line: String, line_num: int) -> Variant:
 	if "enum " in line or "@export" in line:
 		return null
 
+	# Numbers are looked for in the code, not in the text it carries. This used
+	# to scan the whole line and skip only a digit directly after a quote, which
+	# meant `"%6.2f"` reported 6 while `"6 things"` was let through.
+	var code := code_only(line)
+
 	var regex := RegEx.new()
 	regex.compile("(?<![a-zA-Z_])(-?\\d+\\.?\\d*)(?![a-zA-Z_\\d])")
 
-	for regex_match in regex.search_all(line):
+	for regex_match in regex.search_all(code):
 		var num_str: String = regex_match.get_string()
 		var num_val: float = float(num_str)
 
 		# Skip allowed numbers
 		if num_val in config.allowed_numbers:
-			continue
-
-		# Skip if it's part of a variable name or in a string
-		var pos: int = regex_match.get_start()
-		if pos > 0 and line[pos - 1] == '"':
 			continue
 
 		return {

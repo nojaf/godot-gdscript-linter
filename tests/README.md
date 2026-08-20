@@ -47,6 +47,7 @@ code that triggers it. Start there rather than here.
 | `signatures` | a declaration wrapped across lines being read from its first line only |
 | `exports` | every shape of null guard, and where a Node's guard has to live |
 | `unused` | what keeps a function alive, including callers that are scene data rather than code |
+| `magic` | numbers that are code, against digits that are text or prose |
 
 ## What is asserted, and what is snapshotted
 

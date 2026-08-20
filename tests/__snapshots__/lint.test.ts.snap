@@ -1,9 +1,8 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures unused 1`] = `
-"src/probe.gd:61  warning  unused-function  Function 'all_done' is never referenced in the project
-src/probe.gd:65  warning  unused-function  Function 'never_mentioned_anywhere' is never referenced in the project
-src/wired.gd:23  warning  unused-function  Function 'never_wired_at_all' is never referenced in the project"
+exports[`fixtures magic 1`] = `
+"src/probe.gd:44  info  magic-number  Magic number 37 (consider using a named constant)
+src/probe.gd:49  info  magic-number  Magic number 99 (consider using a named constant)"
 `;
 
 exports[`fixtures broken 1`] = `
@@ -61,4 +60,10 @@ src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters
 src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
 src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
 src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
+`;
+
+exports[`fixtures unused 1`] = `
+"src/probe.gd:61  warning  unused-function  Function 'all_done' is never referenced in the project
+src/probe.gd:65  warning  unused-function  Function 'never_mentioned_anywhere' is never referenced in the project
+src/wired.gd:23  warning  unused-function  Function 'never_wired_at_all' is never referenced in the project"
 `;

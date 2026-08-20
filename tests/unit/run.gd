@@ -16,6 +16,7 @@ var _failures := 0
 func _init() -> void:
 	_declaration_syntax()
 	_wrapped_declarations()
+	_code_only()
 	# Printed so the caller can tell "everything passed" from "nothing ran".
 	# Godot exits 0 when a script fails to load at all, so an exit code is not
 	# evidence that any of this executed.
@@ -126,3 +127,22 @@ func _wrapped_declarations() -> void:
 	_check(syntax.declaration_at(broken, 0).span <= GDLintDeclarationSyntax.MAX_WRAPPED_LINES,
 		true, "unbalanced source is bounded")
 
+
+func _code_only() -> void:
+	var strip := GDLintStyleChecker.code_only
+	var blank := func(n: int) -> String: return " ".repeat(n)
+
+	# The quotes stay and the contents are blanked one character for one, so a
+	# column in the result is the same column in the source.
+	_check(strip.call("x = \"abc\""), "x = \"" + blank.call(3) + "\"", "string contents blanked")
+	_check(strip.call("return \"%6.2f  %s\" % [seconds, line]"),
+		"return \"" + blank.call(9) + "\" % [seconds, line]", "format specifier is not code")
+	_check(strip.call("print(\'single\')"), "print(\'" + blank.call(6) + "\')", "single quotes too")
+	_check(strip.call("var n = 42"), "var n = 42", "plain code is untouched")
+	_check(strip.call("var x = 7  # was 250"), "var x = 7  ", "trailing comment dropped")
+
+	# `he said \"pay 500\" ok` is 22 characters once the escapes are counted as two.
+	_check(strip.call("print(\"he said \\\"pay 500\\\" ok\")"),
+		"print(\"" + blank.call(22) + "\")", "an escaped quote does not end the string")
+	_check(strip.call("var url = \"res://a#b\"  # note"),
+		"var url = \"" + blank.call(9) + "\"  ", "a hash inside a string is not a comment")
