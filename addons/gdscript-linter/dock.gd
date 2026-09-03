@@ -1566,12 +1566,7 @@ func _launch_claude_code(issue: Dictionary, use_plan_mode: bool) -> void:
 		if command.is_empty():
 			command = "claude"
 
-	var args: PackedStringArray = [
-		"-d", project_path,
-		"powershell", "-NoProfile", "-NoExit",
-		"-Command", "%s '%s'" % [command, escaped_prompt]
-	]
-	OS.create_process("wt", args)
+	_launch_in_terminal("%s '%s'" % [command, escaped_prompt], project_path)
 
 
 # Launches Claude Code with multiple issues (batch fix)
@@ -1614,12 +1609,7 @@ func _launch_claude_code_batch(issues: Array, use_plan_mode: bool) -> void:
 		if command.is_empty():
 			command = "claude"
 
-	var args: PackedStringArray = [
-		"-d", project_path,
-		"powershell", "-NoProfile", "-NoExit",
-		"-Command", "%s '%s'" % [command, escaped_prompt]
-	]
-	OS.create_process("wt", args)
+	_launch_in_terminal("%s '%s'" % [command, escaped_prompt], project_path)
 
 
 # Launches Claude Code with custom command and instructions (from customize dialog)
@@ -1641,12 +1631,7 @@ func _launch_claude_code_custom(issue: Dictionary, custom_command: String, custo
 
 	var command := custom_command if not custom_command.is_empty() else "claude"
 
-	var args: PackedStringArray = [
-		"-d", project_path,
-		"powershell", "-NoProfile", "-NoExit",
-		"-Command", "%s '%s'" % [command, escaped_prompt]
-	]
-	OS.create_process("wt", args)
+	_launch_in_terminal("%s '%s'" % [command, escaped_prompt], project_path)
 
 
 # Launches Claude Code with multiple issues using custom command/instructions
@@ -1680,9 +1665,54 @@ func _launch_claude_code_batch_custom(issues: Array, custom_command: String, cus
 
 	var command := custom_command if not custom_command.is_empty() else "claude"
 
-	var args: PackedStringArray = [
-		"-d", project_path,
-		"powershell", "-NoProfile", "-NoExit",
-		"-Command", "%s '%s'" % [command, escaped_prompt]
-	]
-	OS.create_process("wt", args)
+	_launch_in_terminal("%s '%s'" % [command, escaped_prompt], project_path)
+
+
+# Spawns the assembled Claude command in a terminal rooted at the project. The
+# command arrives as a fully quoted shell line, the same line the Windows path
+# hands to PowerShell. Windows uses Windows Terminal; Linux tries the terminal
+# emulators a desktop is likely to have and names what to install when none
+# launches. Elsewhere the button used to do nothing at all, which is
+# indistinguishable from a broken linter, so it says what to do instead.
+func _launch_in_terminal(shell_command: String, project_path: String) -> void:
+	if OS.has_feature("windows"):
+		var args: PackedStringArray = [
+			"-d", project_path,
+			"powershell", "-NoProfile", "-NoExit",
+			"-Command", shell_command
+		]
+		if OS.create_process("wt", args) == -1:
+			push_error("gdscript-linter: could not launch Windows Terminal (wt) for the Claude Code integration")
+		return
+
+	if OS.has_feature("linux"):
+		# bash -lc so the login profile is read and `claude` is on PATH; the
+		# trailing exec keeps the window open after the command ends, which is
+		# what -NoExit promises on Windows. The cd lives inside the command
+		# itself, which spares every emulator its own working-directory flag.
+		var linux_command := "cd '%s' && { %s ; }; exec bash" % [
+			project_path.replace("'", "''"),
+			shell_command
+		]
+		# x-terminal-emulator is the Debian alternative and points at whichever
+		# emulator is installed; the others cover the stock desktops directly.
+		var terminals := [
+			["x-terminal-emulator", ["-e"]],
+			["gnome-terminal", ["--"]],
+			["konsole", ["-e"]],
+			["xfce4-terminal", ["-x"]],
+		]
+		for terminal: Array in terminals:
+			var argv: PackedStringArray = PackedStringArray([terminal[0]])
+			argv.append_array(PackedStringArray(terminal[1]))
+			argv.append_array(PackedStringArray(["bash", "-lc", linux_command]))
+			# -1 is a failed spawn (binary absent); anything else means it is running.
+			if OS.create_process(terminal[0], argv) != -1:
+				return
+		push_error("gdscript-linter: no terminal emulator could be launched for the Claude Code integration."
+			+ " Install one of x-terminal-emulator, gnome-terminal, konsole or xfce4-terminal,"
+			+ " or run the command yourself:\n    cd %s\n    %s" % [project_path, shell_command])
+		return
+
+	push_error("gdscript-linter: launching Claude Code from the dock is not supported on this platform."
+		+ " Run the command in a terminal:\n    cd %s\n    %s" % [project_path, shell_command])

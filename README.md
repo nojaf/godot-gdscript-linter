@@ -68,6 +68,10 @@ Launch [Claude Code](https://claude.ai/code) directly from scan results to get A
 - Issue context (file, line, type, message) is passed automatically
 - Add custom instructions to customize the AI prompt
 - Requires [claude-code CLI](https://github.com/anthropics/claude-code) installed
+- Opens in Windows Terminal on Windows and in the first of `x-terminal-emulator`,
+  `gnome-terminal`, `konsole` or `xfce4-terminal` found on Linux; on other
+  platforms the dock reports that it cannot open a terminal and prints the
+  command to run by hand
 
 **Interaction Options:**
 

@@ -13,8 +13,9 @@ against, and the formatter is rebuilt from a sibling checkout every run.
 ## What you need
 
 - **Bun.** Nothing else from npm; there is no `package.json` and no install step.
-- **Godot 4**, on `PATH` or as `/Applications/Godot.app`. Set `GODOT=/path/to/godot`
-  to pin a specific one, which is worth doing if you have several installed.
+- **Godot 4**, on `PATH` (macOS also picks up `/Applications/Godot.app`).
+  Set `GODOT=/path/to/godot` to pin a specific one, which is worth doing if you
+  have several installed.
 - **The formatter**, checked out beside this repository. Three of the checks read
   source structure from `gdscript-formatter index` and cannot run without it, so
   the suite builds it rather than skipping them: a suite that quietly skips half
