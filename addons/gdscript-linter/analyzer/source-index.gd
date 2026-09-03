@@ -142,7 +142,11 @@ func _find_binary() -> String:
 
 func _which(name: String) -> String:
 	var output: Array = []
-	if OS.execute("/usr/bin/env", ["which", name], output, false) != 0:
+	# `command -v` is a shell builtin, so the lookup does not depend on the
+	# external `which` binary, which a minimal Arch install does not ship.
+	if OS.execute("/bin/sh", ["-c", "command -v \"$1\"", "sh", name], output, false) != 0:
+		return ""
+	if output.is_empty():
 		return ""
 	var path := String(output[0]).strip_edges()
 	return path if FileAccess.file_exists(path) else ""

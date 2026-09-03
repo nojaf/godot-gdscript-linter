@@ -68,10 +68,10 @@ Launch [Claude Code](https://claude.ai/code) directly from scan results to get A
 - Issue context (file, line, type, message) is passed automatically
 - Add custom instructions to customize the AI prompt
 - Requires [claude-code CLI](https://github.com/anthropics/claude-code) installed
-- Opens in Windows Terminal on Windows and in the first of `x-terminal-emulator`,
-  `gnome-terminal`, `konsole` or `xfce4-terminal` found on Linux; on other
-  platforms the dock reports that it cannot open a terminal and prints the
-  command to run by hand
+- Opens in Windows Terminal on Windows; on Linux it asks `xdg-terminal-exec`
+  for the desktop's default terminal first and falls back to alacritty, ghostty,
+  kitty, foot and the common desktop terminals; on other platforms the dock
+  reports that it cannot open a terminal and prints the command to run by hand
 
 **Interaction Options:**
 
@@ -107,6 +107,43 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 - `0` - No issues found
 - `1` - Warnings only
 - `2` - Critical issues found
+
+## Prerequisites
+
+For the editor dock and the analyzer CLI, Godot is the only requirement. The
+shell workflow (`copy.sh`, the generated `lint.sh`, the test suite) needs more,
+and every script involved checks what it needs and stops with the name of what
+is missing rather than failing deep inside a build log.
+
+On Arch / Omarchy, with mise:
+
+```bash
+sudo pacman -S godot-mono    # everything: the dock and the analyzer CLI
+mise use -g rust             # 1.85+, only to build the formatter
+sudo pacman -S base-devel    # cc, only to build the formatter; usually present already
+mise use -g bun              # only for this repository's test suite
+```
+
+The mono package installs its editor as `godot-mono` on PATH, which the lint
+script and the test suite find by name alongside `godot`. Rust from rustup
+(https://rustup.rs) works instead of mise, and on macOS the C compiler comes
+with the Xcode command line tools. `GODOT=/path/to/godot` pins a specific
+Godot binary if several are installed.
+
+The formatter is the one dependency that is not a package. Three checks
+(`--check-members`, `--check-unused-functions`, `--check-exports`) read source
+structure from `gdscript-formatter index`, a sub-command that only exists on
+the fork. Check it out beside this repository:
+
+```bash
+git clone -b nojaf https://github.com/nojaf/GDScript-formatter
+```
+
+The scripts find it there, build it, and verify the binary can do the job;
+`scripts/install-formatter.sh` explains itself if anything above is missing.
+Rust and the C compiler are only needed to build the formatter. The built
+binary stands alone, and `cargo install --path .` from that checkout puts it
+on PATH permanently if you would rather not rebuild on every run.
 
 ## Installation
 
@@ -320,6 +357,9 @@ These numbers are not flagged as they are commonly self-explanatory:
 
 - Godot 4.0+
 - GDScript only (no C# support)
+
+What the analyzed project needs, as opposed to what the tooling needs; see
+[Prerequisites](#prerequisites) for that.
 
 ## License
 

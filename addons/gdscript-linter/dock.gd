@@ -1694,9 +1694,15 @@ func _launch_in_terminal(shell_command: String, project_path: String) -> void:
 			project_path.replace("'", "''"),
 			shell_command
 		]
-		# x-terminal-emulator is the Debian alternative and points at whichever
-		# emulator is installed; the others cover the stock desktops directly.
+		# xdg-terminal-exec resolves whatever the desktop's default terminal is
+		# (Hyprland setups such as Omarchy wire their launcher to it); the rest
+		# cover installs where that is absent, Debian's alternative included.
 		var terminals := [
+			["xdg-terminal-exec", []],
+			["alacritty", ["-e"]],
+			["ghostty", ["-e"]],
+			["kitty", []],
+			["foot", []],
 			["x-terminal-emulator", ["-e"]],
 			["gnome-terminal", ["--"]],
 			["konsole", ["-e"]],
@@ -1710,7 +1716,7 @@ func _launch_in_terminal(shell_command: String, project_path: String) -> void:
 			if OS.create_process(terminal[0], argv) != -1:
 				return
 		push_error("gdscript-linter: no terminal emulator could be launched for the Claude Code integration."
-			+ " Install one of x-terminal-emulator, gnome-terminal, konsole or xfce4-terminal,"
+			+ " Install one (alacritty, ghostty or kitty) or set your default terminal,"
 			+ " or run the command yourself:\n    cd %s\n    %s" % [project_path, shell_command])
 		return
 

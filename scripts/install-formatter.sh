@@ -54,6 +54,16 @@ verify_supports_index() {
 	"$1" index --help 2>/dev/null | grep -q -- '--project-root'
 }
 
+# The crate is edition 2024, which needs rustc 1.85 or newer. A distro package
+# named rustc is frequently older, and the cargo error for that names no remedy.
+rustc_at_least() {
+	local have="$1" want="$2"
+	local h_major="${have%%.*}" h_minor="${have#*.}"; h_minor="${h_minor%%.*}"
+	local w_major="${want%%.*}" w_minor="${want#*.}"; w_minor="${w_minor%%.*}"
+	[ "$h_major" -gt "$w_major" ] && return 0
+	[ "$h_major" -eq "$w_major" ] && [ "$h_minor" -ge "$w_minor" ]
+}
+
 # A pinned binary is taken as given, beyond checking it can do the job. Whoever
 # set the variable knows something this script does not.
 if [ -n "${GDLINT_FORMATTER:-}" ]; then
@@ -104,13 +114,44 @@ BINARY="$FORMATTER_REPO/target/release/gdscript-formatter"
 if [ "$BUILD" -eq 1 ]; then
 	command -v cargo >/dev/null 2>&1 \
 		|| die 3 "cargo not found on PATH, needed to build $FORMATTER_REPO
-  Install Rust from https://rustup.rs, or pass --no-build to use an existing binary."
+  Install Rust: rustup (https://rustup.rs) or mise (mise use -g rust).
+  Or pass --no-build to use an existing binary."
+
+	# tree-sitter compiles C sources, so a linker and compiler are needed even
+	# though nothing here is written in C. Minimal Linux images and CI
+	# containers often ship without one.
+	if ! command -v cc >/dev/null 2>&1 \
+		&& ! command -v gcc >/dev/null 2>&1 \
+		&& ! command -v clang >/dev/null 2>&1; then
+		die 3 "no C compiler on PATH, needed to build tree-sitter
+  Debian/Ubuntu: sudo apt install build-essential
+  Fedora: sudo dnf install gcc
+  Arch: sudo pacman -S gcc
+  macOS already has one with the Xcode command line tools."
+	fi
+
+	RUSTC_VERSION="$(rustc --version 2>/dev/null | awk '{print $2}')" || RUSTC_VERSION=""
+	case "$RUSTC_VERSION" in
+		[0-9]*.[0-9]*)
+			rustc_at_least "$RUSTC_VERSION" 1.85 \
+				|| die 3 "rustc $RUSTC_VERSION is too old: gdscript-formatter is edition 2024 and needs 1.85+
+  Run: rustup update stable, or with mise: mise use -g rust@1.85
+  A distro rustc package is usually older than the edition needs.
+  Or pass --no-build to use an existing binary." ;;
+		*)
+			die 3 "rustc not found or unreadable, although cargo is.
+  Install a matching toolchain: rustup update stable, or mise use -g rust@1.85" ;;
+	esac
+
 	say "building $FORMATTER_REPO (release)"
 	# Building on every run is deliberate. The index format is versioned by policy
 	# rather than by a number that moves (schema stays at 1), so the guard against
 	# a mismatched producer is that both sides are rebuilt together. An up-to-date
 	# build costs about two tenths of a second.
-	( cd "$FORMATTER_REPO" && cargo build --release ) >&2 \
+	# --bin limits that rebuild to the CLI the linter runs, skipping the
+	# gdextension member (the in-editor distribution) and the benchmark and
+	# release-helper binaries, which this script's contract says nothing about.
+	( cd "$FORMATTER_REPO" && cargo build --release --bin gdscript-formatter ) >&2 \
 		|| die 3 "cargo build failed in $FORMATTER_REPO"
 fi
 
