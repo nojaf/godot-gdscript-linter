@@ -13,6 +13,7 @@ extends SceneTree
 ##   --check-members    Load every script; report compile failures and self.foo.bar that resolves to nothing
 ##   --check-unused-functions  Report functions nothing in the project references
 ##   --check-exports    Report object-typed @export vars that nothing null-guards
+##   --check-node-paths Report $Path, %Name and get_node("Path") that no attached scene has
 
 const AnalysisConfigClass = preload("res://addons/gdscript-linter/analyzer/analysis-config.gd")
 const CodeAnalyzerClass = preload("res://addons/gdscript-linter/analyzer/code-analyzer.gd")
@@ -28,6 +29,7 @@ var _no_ignore: bool = false  # Bypass all gdlint:ignore directives
 var _check_members: bool = false  # Also load every script and verify self.foo.bar chains
 var _check_unused_functions: bool = false  # Also report functions nothing references
 var _check_exports: bool = false  # Also report @export object vars with no null guard
+var _check_node_paths: bool = false  # Also verify $Path and %Name against the scenes
 var _source_index: GDLintSourceIndex = null  # Structure, built once per run
 var _config_path: String = ""  # Custom config file path
 var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
@@ -110,6 +112,8 @@ func _parse_arguments() -> void:
 					_check_unused_functions = true
 				"--check-exports":
 					_check_exports = true
+				"--check-node-paths":
+					_check_node_paths = true
 				"--help", "-h":
 					_print_help()
 					quit(0)
@@ -155,6 +159,9 @@ func _print_help() -> void:
 	print("  --check-unused-functions")
 	print("                    Report functions nothing in the project references")
 	print("  --check-exports   Report object-typed @export vars that nothing null-guards")
+	print("  --check-node-paths")
+	print("                    Report $Path, %Name and get_node(\"Path\") that name no node")
+	print("                    in any scene the script is attached to")
 	print("  --path <dir>      Legacy: analyze single path (use positional args instead)")
 	print("  --help, -h        Show this help message")
 	print("")
@@ -202,7 +209,7 @@ func _run_analysis() -> void:
 		else:
 			_merge_results(merged_result, result)
 
-	if _check_members or _check_unused_functions or _check_exports:
+	if _check_members or _check_unused_functions or _check_exports or _check_node_paths:
 		_source_index = _build_source_index(merged_result)
 		if _source_index == null:
 			return  # _build_source_index already reported why
@@ -215,6 +222,9 @@ func _run_analysis() -> void:
 
 	if _check_exports:
 		_run_export_check(merged_result, config)
+
+	if _check_node_paths:
+		_run_node_path_check(merged_result, config)
 
 	# Apply severity filter if specified
 	if not _severity_filter.is_empty():
@@ -294,6 +304,18 @@ func _run_export_check(result, config) -> void:
 
 	var export_check := GDLintExportCheck.new()
 	for issue in export_check.run(_source_index, paths, config.respect_ignore_directives):
+		result.add_issue(issue)
+
+
+# Scenes are read project-wide inside the check, because the scene that attaches
+# a script is not necessarily under the directory being analyzed.
+func _run_node_path_check(result, config) -> void:
+	var paths: Array = []
+	for file_result in result.file_results:
+		paths.append(file_result.file_path)
+
+	var node_path_check := GDLintNodePathCheck.new()
+	for issue in node_path_check.run(_source_index, paths, config.respect_ignore_directives):
 		result.add_issue(issue)
 
 

@@ -130,9 +130,9 @@ script and the test suite find by name alongside `godot`. Rust from rustup
 with the Xcode command line tools. `GODOT=/path/to/godot` pins a specific
 Godot binary if several are installed.
 
-The formatter is the one dependency that is not a package. Three checks
-(`--check-members`, `--check-unused-functions`, `--check-exports`) read source
-structure from `gdscript-formatter index`, a sub-command that only exists on
+The formatter is the one dependency that is not a package. The index-backed
+checks (listed in the options table of `addons/gdscript-linter/docs/CLI.md`)
+read source structure from `gdscript-formatter index`, a sub-command that only exists on
 the fork. Check it out beside this repository:
 
 ```bash

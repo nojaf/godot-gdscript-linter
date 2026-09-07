@@ -9,8 +9,9 @@ extends RefCounted
 ## types, arity, which exports can be null, which methods are engine virtuals.
 ## It cannot say where any of it is written, and it cannot say anything at all
 ## about a script that does not compile. This supplies the other half:
-## declarations, references, member chains, string literals, comparisons and
-## comments, each with a source range, plus what each file extends.
+## declarations, references, member chains, string literals, node paths,
+## comparisons and comments, each with a source range, plus what each file
+## extends.
 ##
 ## Everything here used to be regular expressions over lines, and every bug found
 ## in those checks came from that. Annotations in front of a declaration, locals
@@ -104,6 +105,7 @@ func _start_file(header: Dictionary) -> Dictionary:
 		"references": [],
 		"member_chains": [],
 		"string_literals": [],
+		"node_paths": [],
 		"comparisons": [],
 		"comments": [],
 	}
@@ -116,6 +118,7 @@ const RECORD_BUCKETS := {
 	"reference": "references",
 	"member_chain": "member_chains",
 	"string_literal": "string_literals",
+	"node_path": "node_paths",
 	"comparison": "comparisons",
 	"comment": "comments",
 }

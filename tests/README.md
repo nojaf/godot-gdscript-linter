@@ -18,9 +18,9 @@ against, and the formatter is rebuilt from a sibling checkout every run.
   on Arch, `pacman -S godot-mono` puts `godot-mono` there). Set
   `GODOT=/path/to/godot` to pin a specific one, which is worth doing if you
   have several installed.
-- **The formatter**, checked out beside this repository. Three of the checks read
-  source structure from `gdscript-formatter index` and cannot run without it, so
-  the suite builds it rather than skipping them: a suite that quietly skips half
+- **The formatter**, checked out beside this repository. The index-backed checks
+  read source structure from `gdscript-formatter index` and cannot run without
+  it, so the suite builds it rather than skipping them: a suite that quietly skips half
   its cases reports success while testing nothing. See
   `scripts/install-formatter.sh`, which the run calls for you and which explains
   itself if the checkout is missing.
@@ -54,6 +54,7 @@ code that triggers it. Start there rather than here.
 | `style` | naming, text and body checks that need no threshold configured |
 | `limits` | the size and complexity thresholds, measured against a lowered `limits.json` |
 | `directives` | `#@Sealed`, and `gdlint:strict` including a case it silently misses |
+| `nodepaths` | `$Path`, `%Name` and `get_node` resolved against an inherited scene, an instanced sub-scene, a placeholder and a script on a non-root node |
 
 ## What is asserted, and what is snapshotted
 

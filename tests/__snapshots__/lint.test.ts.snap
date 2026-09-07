@@ -1,20 +1,5 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`fixtures style 1`] = `
-"src/ascii.gd:10  warning  ascii-violation  Non-ASCII character found: U+2192
-src/ascii.gd:14  warning  ascii-violation  Non-ASCII character found: U+201C
-src/bodies.gd:7  info  empty-function  Function 'empty_stub' is empty or contains only 'pass'
-src/bodies.gd:13  warning  unused-variable  Variable 'never_read' is declared but never used
-src/naming.gd:1  warning  naming-class  Class name 'badly_Named_Class' should be PascalCase
-src/naming.gd:10  info  naming-function  Function 'BadlyNamedFunction' should be snake_case
-src/text.gd:6  info  todo-comment  TODO: this comment is what todo-comment looks for
-src/text.gd:7  info  commented-code  Commented-out code detected
-src/text.gd:8  info  commented-code  Commented-out code detected
-src/text.gd:12  info  long-line  Line exceeds 120 chars (135)
-src/text.gd:21  info  commented-code  Commented-out code detected
-src/text.gd:26  info  commented-code  Commented-out code detected"
-`;
-
 exports[`fixtures broken 1`] = `
 "src/annotated_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 1 dependent script(s) fail because of it
 src/broken_base.gd:1  critical  script-load-failed  Script fails to compile (see the parse error above); 4 dependent script(s) fail because of it
@@ -88,6 +73,19 @@ src/probe.gd:42  critical  wrong-argument-count  Signal 'panel_ready' emitted wi
 src/probe.gd:43  critical  method-not-called  'helper' is a method used as a condition without being called; the reference is always true (did you mean 'helper()'?)"
 `;
 
+exports[`fixtures nodepaths 1`] = `
+"src/base.gd:13  critical  unknown-node-path  '$Panel/Button' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root); the only 'Button' is at 'Panel/Box/Button'
+src/base.gd:19  critical  unknown-node-path  '%Button' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root); 'Button' is at 'Panel/Box/Button' but not marked unique_name_in_owner
+src/base.gd:20  critical  unknown-node-path  '%Nothing' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root)
+src/base.gd:24  critical  unknown-node-path  'get_node("Panel/Missing")' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root)
+src/base.gd:29  critical  unknown-node-path  '$Sub/Nope' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root)
+src/base.gd:48  critical  unknown-node-path  '$Panel/Gone' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root)
+src/base.gd:50  critical  unknown-node-path  '$Panel/Box/Buton' does not exist in scenes/base.tscn or scenes/child.tscn (attached at the root)
+src/child.gd:7  critical  unknown-node-path  '$Panel/Button' does not exist in scenes/child.tscn (attached at the root); the only 'Button' is at 'Panel/Box/Button'
+src/deep.gd:8  critical  unknown-node-path  '$"../Missing"' does not exist in scenes/base.tscn or scenes/child.tscn (attached at 'Panel/Box')
+src/inner.gd:6  critical  unknown-node-path  '$Panel' does not exist in scenes/base.tscn or scenes/child.tscn (attached at 'Sub'); scenes/sub.tscn (attached at the root); the only 'Panel' is at '../Panel'"
+`;
+
 exports[`fixtures signatures 1`] = `
 "src/probe.gd:24  info  missing-return-type  Function 'untyped_flat' has no return type annotation
 src/probe.gd:28  info  missing-return-type  Function 'untyped_wrapped' has no return type annotation
@@ -95,6 +93,21 @@ src/probe.gd:34  warning  too-many-params  Function 'many_flat' has 6 parameters
 src/probe.gd:38  warning  too-many-params  Function 'many_wrapped' has 6 parameters (max 4)
 src/probe.gd:49  info  unused-parameter  Parameter 'never_flat' is declared but never used
 src/probe.gd:53  info  unused-parameter  Parameter 'never_wrapped' is declared but never used"
+`;
+
+exports[`fixtures style 1`] = `
+"src/ascii.gd:10  warning  ascii-violation  Non-ASCII character found: U+2192
+src/ascii.gd:14  warning  ascii-violation  Non-ASCII character found: U+201C
+src/bodies.gd:7  info  empty-function  Function 'empty_stub' is empty or contains only 'pass'
+src/bodies.gd:13  warning  unused-variable  Variable 'never_read' is declared but never used
+src/naming.gd:1  warning  naming-class  Class name 'badly_Named_Class' should be PascalCase
+src/naming.gd:10  info  naming-function  Function 'BadlyNamedFunction' should be snake_case
+src/text.gd:6  info  todo-comment  TODO: this comment is what todo-comment looks for
+src/text.gd:7  info  commented-code  Commented-out code detected
+src/text.gd:8  info  commented-code  Commented-out code detected
+src/text.gd:12  info  long-line  Line exceeds 120 chars (135)
+src/text.gd:21  info  commented-code  Commented-out code detected
+src/text.gd:26  info  commented-code  Commented-out code detected"
 `;
 
 exports[`fixtures unused 1`] = `

@@ -52,6 +52,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
 | `--check-unused-functions` | Report functions nothing in the project references |
 | `--check-exports` | Report object-typed `@export` vars that nothing null-guards |
+| `--check-node-paths` | Report `$Path`, `%Name` and `get_node("Path")` that name no node in any scene the script is attached to |
 | `--help, -h` | Show help message |
 
 ## Exit Codes
@@ -128,10 +129,11 @@ godot --headless --script ... -- --config gdlint-strict.json
 
 ## The formatter binary
 
-`--check-members`, `--check-unused-functions` and `--check-exports` read source
-structure from `gdscript-formatter index`, a sub-command that exists only on
+`--check-members`, `--check-unused-functions`, `--check-exports` and
+`--check-node-paths` read source structure from `gdscript-formatter index`, a
+sub-command that exists only on
 [this fork](https://github.com/nojaf/GDScript-formatter/tree/nojaf). Without it
-those three checks refuse to run and the process exits 3. They never fall back to
+those checks refuse to run and the process exits 3. They never fall back to
 checking less, because a report with nothing in it looks exactly like a clean
 project.
 
@@ -159,9 +161,9 @@ The `lint.sh` that `copy.sh` generates calls the same script on every run, so th
 two sides are always built from matching sources. An up-to-date build takes a
 fraction of a second. That matters more than it sounds: the index format is
 versioned by policy rather than by a number that moves, so rebuilding together is
-the actual guard against a mismatched producer. Disabling all three checks
-(`NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1`) skips the requirement
-entirely.
+the actual guard against a mismatched producer. Disabling every index-backed
+check through its `NO_*_CHECK=1` switch, which the generated `lint.sh` lists at
+the top, skips the requirement entirely.
 
 ## Member Checking (`--check-members`)
 
@@ -516,6 +518,70 @@ The test has to be *about the reference*. A condition that merely mentions it â€
 @export var wired_by_the_parent: Node
 ```
 
+## Node Paths (`--check-node-paths`)
+
+A scene gets reorganised in the editor and the script keeps the old path:
+
+```gdscript
+@onready var commit_button: Button = $Panel/CommitButton
+# the button now lives at Panel/MarginContainer/Columns/Sidebar/CommitButton
+```
+
+Godot accepts this. The variable is null from the first frame, and the failure
+lands wherever it is first used. Reported as CRITICAL:
+
+```
+dev/lab.gd:26: '$Panel/CommitButton' does not exist in dev/lab.tscn or
+    dev/lab_capture.tscn (attached at the root); the only 'CommitButton' is at
+    'Panel/MarginContainer/Columns/Sidebar/CommitButton'
+```
+
+### What is checked
+
+`$Path`, `$"Path/With Spaces"`, `%Name` and `get_node("Path")`, wherever they
+are written: `@onready` values, assignments, arguments, conditions, and the head
+of a chain such as `$Panel/Button.pressed.connect(...)`.
+
+`get_node_or_null`, `has_node` and `find_child` are left alone. They ask whether
+a node is there and handle the answer, so a path they name is allowed to be
+absent.
+
+### Which scenes
+
+Every scene in the project is read through the engine's `SceneState`, so
+inherited scenes, instanced sub-scenes, instance placeholders and binary `.scn`
+files are what Godot says they are rather than what a text parser makes of them.
+
+A path is resolved from every node that carries the script, or a script deriving
+from it: a scene that inherits another and swaps the root script for a subclass
+still runs the base script's `@onready` lines. It is reported only when it
+resolves in none of them. A node that exists in one inherited scene and not in
+another is that scene's business.
+
+Three things produce no verdict rather than a finding: a script no scene
+attaches, which may build its children in code; a path that leaves the scene,
+through `..` past the root or an absolute `/root/...`; and a path into an
+instance placeholder, whose children do not exist until something loads them.
+
+When a node of the same name exists somewhere else in the scene, the message says
+where, written relative to the node the script sits on.
+
+### Limitations
+
+- Children added in code are not seen. A script that does `add_child` in
+  `_init` and reads `$Child` in `_ready` is reported if a scene attaches it,
+  even though it works. Silence it on the line.
+- A path built from a variable is not a literal and is not checked.
+- The node's type is not compared with the declared type. `@onready var b:
+  Button = $Panel/Label` resolves, and is not reported.
+- Reading a scene loads it, along with its scripts and resources. A scene that
+  fails to load is skipped, and the scripts it attaches go unchecked there.
+
+```gdscript
+# gdlint:ignore-next-line:unknown-node-path
+@onready var built_in_init: Node = $Child
+```
+
 ## Output Formats
 
 ### Console (default)
@@ -703,6 +769,7 @@ For use with `--check`:
 | `method-not-called` | Method used as a condition without being called (`--check-members` only) |
 | `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
 | `unguarded-export` | Object-typed `@export` with no null guard (`--check-exports` only) |
+| `unknown-node-path` | `$Path`, `%Name` or `get_node("Path")` that no attached scene has (`--check-node-paths` only) |
 
 ## Common Mistakes
 

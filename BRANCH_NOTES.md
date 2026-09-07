@@ -34,7 +34,7 @@ AI-written code at all, and that is a reasonable thing for them to refuse.
 
 ## How to try it
 
-The three checks need a second tool. They read source structure from
+The index-backed checks need a second tool. They read source structure from
 `gdscript-formatter index`, a sub-command of a fork of GDQuest's formatter:
 <https://github.com/nojaf/GDScript-formatter/tree/nojaf>. Build that first, then:
 
@@ -44,7 +44,7 @@ git clone -b nojaf https://github.com/nojaf/godot-gdscript-linter
 export GDLINT_FORMATTER=/path/to/gdscript-formatter
 godot --headless --path <project> --import
 godot --headless --path <project> --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- \
-    --check-members --check-unused-functions --check-exports --clickable
+    --check-members --check-unused-functions --check-exports --check-node-paths --clickable
 ```
 
 The `--import` step matters. The checks read type information from the engine,
@@ -65,6 +65,7 @@ how far each piece sits from something that could be.
 | `--check-members`: verify member access, signal emit arity, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Only with the binary |
 | `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Only with the binary |
 | `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Only with the binary |
+| `--check-node-paths`: `$Path`, `%Name` and `get_node` that no attached scene has | not yet committed | Only with the binary |
 | `copy.sh`: install the addon into a project and generate a `lint.sh` wrapper | `9b672f3` | No, local workflow |
 | `GDLintSourceIndex`: take source structure from `gdscript-formatter index` rather than regular expressions | `acfe210`, `7371318` | No, adds a dependency |
 | `GDLintDeclarationSyntax`: recognise annotated and `static` declarations across the existing checkers, and declarations wrapped across lines | `92a5aa3`, `bfcf2fe`, `af84866`, `26c88e2` | Yes |
@@ -77,7 +78,7 @@ flags sees exactly what they saw before. That discipline is worth keeping now fo
 a different reason than the one it was adopted for: it is what makes reapplying
 this branch on a newer upstream a mechanical job rather than a merge.
 
-**The external binary is what settled it.** The three checks were written against
+**The external binary is what settled it.** The index-backed checks were written against
 regular expressions first and later moved onto the index, which removed 26 regular
 expressions and fixed several classes of bug. That move also made them depend on a
 Rust binary, which is not something the upstream project should carry. The only
@@ -319,6 +320,64 @@ Recognized forms are `x != null`, `null != x`, `assert(x, ...)`, `if x:`,
 
 ---
 
+## `--check-node-paths`
+
+Reports `unknown-node-path`, CRITICAL: a `$Path`, `%Name` or `get_node("Path")`
+that names no node in any scene the script is attached to.
+
+The bug that started this: a lab scene was reorganised in the editor, four
+`@onready` paths in its base script kept pointing at where the nodes used to
+be, and Godot said nothing until the first frame used one of them.
+
+### Which scenes count
+
+Scenes are read through `SceneState`, the engine's own account of a scene file:
+the base of an inherited scene, the tree an instanced sub-scene brings with it,
+which instance is a placeholder, and which script sits on which node. Binary
+`.scn` files come for free. Reading the text instead would have meant
+reimplementing inheritance and instancing, which is the kind of faking that
+produced every earlier bug.
+
+A path is resolved from every node carrying the script or a script deriving
+from it, and reported only when no such scene has it. Both halves matter for
+the case that motivated the check. `lab.gd` is attached to `lab.tscn`, and
+`lab_capture.tscn` inherits that scene and swaps the root script for
+`lab_capture.gd`, which extends `Lab`. The base script's `@onready` lines run in
+both, so both trees are checked, and a node the child scene adds keeps a
+base-script path silent.
+
+The hint names where a node of that name actually is, relative to the node the
+script sits on. A script on `Panel/Box` reaching for `Panel/Facts` is told
+`../Facts`; the scene-root spelling would send it to `Panel/Box/Panel/Facts`.
+
+### What produces no verdict
+
+A script no scene attaches; a path that leaves the scene through `..` or
+`/root`; a path into an instance placeholder. In each case the scene cannot
+answer, and "cannot answer" is not "missing". `get_node_or_null`, `has_node` and
+`find_child` ask a question and handle the answer, so their paths are allowed
+to be absent.
+
+### What it needed from the index
+
+The index reported `$Clock` only as the head of a member chain. A bare one, on
+the right of an assignment, as an argument, or as the value of an `@onready`
+variable, appeared nowhere, and the `@onready` value is the line this check most
+needs. Requirement 10 on the formatter side added a `node_path` record per `$`
+or `%` expression. The corpus test there holds `get_node` grammar nodes equal to
+`node_path` records, so a form the collector misses fails that build rather
+than silently narrowing this check.
+
+### Limits
+
+- Children added in code are not seen. A scene that attaches the script makes
+  `$Child` a finding even when `_init` creates it.
+- The node's type is not compared with the declared type.
+- Reading a scene loads it, with its scripts and resources. A scene that fails
+  to load is skipped, and the scripts it attaches go unchecked there.
+
+---
+
 ## `GDLintDeclarationSyntax`
 
 One place answers "does this line start a declaration", and it tolerates
@@ -392,6 +451,11 @@ line number.
 A check joins the two. `unknown-member` needs the member set from the engine and
 the chain position from the index. Neither half alone is enough, and the half that
 used to be faked with regular expressions is where every bug came from.
+
+`--check-node-paths` adds a third source, the scene files, and reads them the
+same way: through the engine's `SceneState`, which knows what a scene file
+means, rather than through the text, which would have to be taught inheritance
+and instancing all over again.
 
 The split is not always this clean. A script that fails to compile has structure
 and no meaning at all: the engine cannot say what it extends, or what it is
@@ -492,7 +556,7 @@ one.
 
 `bun test` runs the suite, and `tests/README.md` says how to run it, what it
 needs, and how to add a fixture. Unit assertions over the pure functions execute
-inside Godot; eleven fixture projects each carry a `config` naming the flags to
+inside Godot; a fixture project per area of the linter, each carrying a `config` naming the flags to
 run and a snapshot holding their findings. Under thirty seconds for all of it,
 and `bun test --watch` while working on a checker.
 
@@ -591,8 +655,8 @@ Nothing here is blocking. Ordered by how ready each is to pick up.
    "The rebase surface" below for the list and for how far upstream has moved.
    Nothing to do while it stays one unrelated commit ahead.
 
-2. **The editor dock still does not know about any of this.** All three checks are
-   CLI-only, by choice, because this project is developed from an external editor.
+2. **The editor dock still does not know about any of this.** The checks added
+   here are CLI-only, by choice, because this project is developed from an external editor.
    Wiring them into the dock is work nobody has done.
 
 3. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
@@ -604,7 +668,7 @@ Nothing here is blocking. Ordered by how ready each is to pick up.
 ## Where this is going
 
 **Not to the maintainer.** The branch has drifted too far to arrive as a
-contribution: three of the checks need an external Rust binary, the checks are
+contribution: the index-backed checks need an external Rust binary, the checks are
 CLI-only by choice, and `copy.sh` is a local workflow. Offering any of it would
 mean a conversation about the dependency before a line of it could land. That
 conversation is not happening, and pretending otherwise was shaping this document
@@ -624,7 +688,7 @@ cannot conflict with it:
 
 | Upstream file | What we changed |
 |---------------|-----------------|
-| `analyzer/analyze-cli.gd` | new flags, index construction, the three check entry points |
+| `analyzer/analyze-cli.gd` | new flags, index construction, one entry point per index-backed check |
 | `analyzer/checkers/function-checker.gd` | `GDLintDeclarationSyntax`, parameter counting |
 | `analyzer/checkers/naming-checker.gd` | `GDLintDeclarationSyntax` |
 | `analyzer/checkers/style-checker.gd` | `GDLintDeclarationSyntax`, the type-hint test |
@@ -639,7 +703,8 @@ makes them cheap to reapply and easy to spot if upstream rewrites the same lines
 `analyze-cli.gd` is the only one with real surgery in it. Files we add, and which
 no rebase touches: `source-index.gd`, `member-check.gd`, `unused-function-check.gd`,
 `export-check.gd`, `declaration-syntax.gd`, `copy.sh`,
-`scripts/validate_sarif.py`, and this file.
+`scene-index.gd`, `node-path-check.gd`, `scripts/validate_sarif.py`, and this
+file.
 
 As of the last rebase check, upstream `main` is one commit ahead of our branch
 point (`e45b640`), and it adds a `project.json` we do not touch. Nothing to do

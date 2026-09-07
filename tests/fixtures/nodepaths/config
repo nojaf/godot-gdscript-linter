@@ -1,0 +1,3 @@
+# flags: --check-node-paths --check unknown-node-path
+# target: res://src
+# exit: 2

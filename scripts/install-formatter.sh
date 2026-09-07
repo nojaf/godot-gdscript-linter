@@ -2,9 +2,10 @@
 # install-formatter.sh — build the gdscript-formatter this linter depends on, and
 # print the path to the binary.
 #
-# Three of the checks (--check-members, --check-unused-functions, --check-exports)
-# read source structure from `gdscript-formatter index`, a sub-command that only
-# exists on the fork at <https://github.com/nojaf/GDScript-formatter/tree/nojaf>.
+# The index-backed checks read source structure from `gdscript-formatter index`,
+# a sub-command that only exists on the fork at
+# <https://github.com/nojaf/GDScript-formatter/tree/nojaf>. Which checks those
+# are is decided in analyzer/analyze-cli.gd, where the index is built.
 # The two repositories are one system in two languages, so this makes the coupling
 # explicit rather than leaving each caller to guess where the binary lives.
 #

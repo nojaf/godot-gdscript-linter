@@ -117,6 +117,10 @@ cat >> "$LINT_SCRIPT" <<'LINT_EOF'
 # And with --check-exports, which reports object-typed @export vars that nothing
 # null-guards. NO_EXPORT_CHECK=1 skips it.
 #
+# And with --check-node-paths, which reports $Path, %Name and get_node("Path")
+# that name no node in any scene the script is attached to.
+# NO_NODE_PATH_CHECK=1 skips it.
+#
 # Some checks need structure from `gdscript-formatter index`. The wrapper finds
 # that binary the same way it finds Godot. Set GDLINT_FORMATTER to pin one.
 #
@@ -162,23 +166,24 @@ if ! GODOT_BIN="$(find_godot)"; then
 	exit 127
 fi
 
-# Three of the checks read source structure from `gdscript-formatter index`, so
+# The index-backed checks read source structure from `gdscript-formatter index`, so
 # the linter and that binary are one system. The linter repository owns the
 # script that builds it and answers where it is; this asks, rather than guessing
 # at paths that drift. Building on every run is what keeps the two sides in step,
 # and an up-to-date build costs a fraction of a second.
 #
 # Only asked for when a check that needs it is actually going to run, so
-# NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1 ./lint.sh still works
-# with no formatter present at all.
+# NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1 NO_NODE_PATH_CHECK=1
+# ./lint.sh still works with no formatter present at all.
 needs_formatter=0
 if [ "${NO_MEMBER_CHECK:-0}" != "1" ] \
 	|| [ "${NO_UNUSED_CHECK:-0}" != "1" ] \
-	|| [ "${NO_EXPORT_CHECK:-0}" != "1" ]; then
+	|| [ "${NO_EXPORT_CHECK:-0}" != "1" ] \
+	|| [ "${NO_NODE_PATH_CHECK:-0}" != "1" ]; then
 	needs_formatter=1
 fi
 case " $* " in
-	*" --check-members "*|*" --check-unused-functions "*|*" --check-exports "*)
+	*" --check-members "*|*" --check-unused-functions "*|*" --check-exports "*|*" --check-node-paths "*)
 		needs_formatter=1 ;;
 esac
 
@@ -208,7 +213,7 @@ if [ "$needs_formatter" = "1" ]; then
 		echo "    - re-run copy.sh from the gdscript-linter repository (regenerates this script)" >&2
 		echo "    - cargo install --path <GDScript-formatter checkout>  (puts it on PATH)" >&2
 		echo "    - set GDLINT_FORMATTER=/path/to/gdscript-formatter" >&2
-		echo "    - re-run with NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1" >&2
+		echo "    - re-run with NO_MEMBER_CHECK=1 NO_UNUSED_CHECK=1 NO_EXPORT_CHECK=1 NO_NODE_PATH_CHECK=1" >&2
 		exit 3
 	fi
 fi
@@ -299,6 +304,16 @@ if [ "${NO_EXPORT_CHECK:-0}" != "1" ]; then
 	case " $* " in
 		*" --check-exports "*) ;;
 		*) set -- --check-exports "$@" ;;
+	esac
+fi
+
+# Node paths by default -- a scene reorganised in the editor leaves every $Path
+# in its scripts pointing at where the nodes used to be, and Godot says nothing
+# until the first frame uses one.
+if [ "${NO_NODE_PATH_CHECK:-0}" != "1" ]; then
+	case " $* " in
+		*" --check-node-paths "*) ;;
+		*) set -- --check-node-paths "$@" ;;
 	esac
 fi
 
