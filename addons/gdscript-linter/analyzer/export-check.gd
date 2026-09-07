@@ -76,9 +76,9 @@ func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 	for name: String in exports:
 		var declaration := _find_declaration(entry, name)
 		if declaration.is_empty():
-			continue  # cannot point at it; say nothing
+			continue # cannot point at it; say nothing
 		if String(declaration.get("default", "")) == "null":
-			continue  # `= null` declares it optional on purpose
+			continue # `= null` declares it optional on purpose
 		if guarded.has(name):
 			continue
 
@@ -86,10 +86,16 @@ func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 		if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNGUARDED_EXPORT):
 			continue
 
-		issues.append(IssueClass.create(
-			path, line, IssueClass.Severity.CRITICAL, CHECK_UNGUARDED_EXPORT,
-			"Export '%s' is never null-guarded; " % name
-			+ "add assert(%s != null, \"...\") or declare it optional with '= null'" % name))
+		issues.append(
+			IssueClass.create(
+				path,
+				line,
+				IssueClass.Severity.CRITICAL,
+				CHECK_UNGUARDED_EXPORT,
+				"Export '%s' is never null-guarded; " % name
+				+ "add assert(%s != null, \"...\") or declare it optional with '= null'" % name,
+			)
+		)
 
 	if _respect_ignores:
 		_ignore_handler.clear()
@@ -105,9 +111,9 @@ func _object_exports(script: Script) -> Array:
 		if not (usage & PROPERTY_USAGE_SCRIPT_VARIABLE):
 			continue
 		if not (usage & PROPERTY_USAGE_EDITOR):
-			continue  # a plain member, not an @export
+			continue # a plain member, not an @export
 		if prop.type != TYPE_OBJECT:
-			continue  # int/float/Color/Array and friends are never null
+			continue # int/float/Color/Array and friends are never null
 		names.append(String(prop.name))
 	return names
 
@@ -119,10 +125,10 @@ func _find_declaration(entry: Dictionary, name: String) -> Dictionary:
 		if String(declaration.get("kind", "")) != "variable":
 			continue
 		if not String(declaration.get("scope", "")).is_empty():
-			continue  # a local, not the export
+			continue # a local, not the export
 		if String(declaration.get("name", "")) == name:
 			return declaration
-	return {}
+	return { }
 
 
 # Names that something actually null-tests.
@@ -132,7 +138,7 @@ func _find_declaration(entry: Dictionary, name: String) -> Dictionary:
 # forever. Comparisons come from the index, so the shapes below are the only
 # policy left here.
 func _guarded_names(entry: Dictionary, restrict_to_lifecycle: bool) -> Dictionary:
-	var guarded := {}
+	var guarded := { }
 
 	for comparison: Dictionary in entry.comparisons:
 		if restrict_to_lifecycle and not _in_lifecycle(String(comparison.get("scope", ""))):
@@ -140,8 +146,8 @@ func _guarded_names(entry: Dictionary, restrict_to_lifecycle: bool) -> Dictionar
 		var operator := String(comparison.get("operator", ""))
 		if operator != "==" and operator != "!=":
 			continue
-		var left := _bare_name(String(comparison.get("left", {}).get("text", "")))
-		var right := _bare_name(String(comparison.get("right", {}).get("text", "")))
+		var left := _bare_name(String(comparison.get("left", { }).get("text", "")))
+		var right := _bare_name(String(comparison.get("right", { }).get("text", "")))
 		if right == "null" and not left.is_empty():
 			guarded[left] = true
 		elif left == "null" and not right.is_empty():

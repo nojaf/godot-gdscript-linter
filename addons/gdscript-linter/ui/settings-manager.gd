@@ -47,8 +47,8 @@ var show_full_path: bool = false
 
 # Settings state - Export
 var filter_exports: bool = false
-var include_context_in_exports: bool = true  # Enabled by default
-var export_folder_path: String = ""  # Empty = res:// (project root)
+var include_context_in_exports: bool = true # Enabled by default
+var export_folder_path: String = "" # Empty = res:// (project root)
 
 # Settings state - Scanning
 var respect_gdignore: bool = true
@@ -58,8 +58,8 @@ var included_addons_text: String = ""
 var excluded_addons_text: String = ""
 
 # Persisted filter selections (only used when remember_filter_selections is true)
-var saved_severity_filter: int = 0  # Index in dropdown
-var saved_type_filter: String = "all"  # check_id or "all"
+var saved_severity_filter: int = 0 # Index in dropdown
+var saved_type_filter: String = "all" # check_id or "all"
 var saved_file_filter: String = ""
 
 # Settings state - Code Checks (all enabled by default)
@@ -91,18 +91,31 @@ var claude_custom_instructions: String = ""
 
 # All check control keys for Enable All / Disable All
 var _check_control_keys: Array[String] = [
-	"check_naming_conventions", "check_long_lines", "check_todo_comments",
-	"check_print_statements", "check_magic_numbers", "check_commented_code",
-	"check_missing_types", "check_function_length", "check_parameters",
-	"check_nesting", "check_cyclomatic_complexity", "check_empty_functions",
-	"check_missing_return_type", "check_file_length", "check_god_class",
-	"check_unused_variables", "check_unused_parameters",
-	"check_ascii_only", "check_strict_limits", "check_sealed"
+	"check_naming_conventions",
+	"check_long_lines",
+	"check_todo_comments",
+	"check_print_statements",
+	"check_magic_numbers",
+	"check_commented_code",
+	"check_missing_types",
+	"check_function_length",
+	"check_parameters",
+	"check_nesting",
+	"check_cyclomatic_complexity",
+	"check_empty_functions",
+	"check_missing_return_type",
+	"check_file_length",
+	"check_god_class",
+	"check_unused_variables",
+	"check_unused_parameters",
+	"check_ascii_only",
+	"check_strict_limits",
+	"check_sealed",
 ]
 
 # References
-var config: Resource  # GDLintConfig
-var controls: Dictionary = {}
+var config: Resource # GDLintConfig
+var controls: Dictionary = { }
 var _limits_handler: GDLintSettingsLimitsHandler
 
 
@@ -125,7 +138,11 @@ func load_settings() -> void:
 
 	# Load export settings
 	filter_exports = _get_setting(editor_settings, "code_quality/export/filter_exports", false)
-	include_context_in_exports = _get_setting(editor_settings, "code_quality/export/include_context", true)
+	include_context_in_exports = _get_setting(
+		editor_settings,
+		"code_quality/export/include_context",
+		true,
+	)
 	export_folder_path = _get_setting(editor_settings, "code_quality/export/folder_path", "")
 
 	# Load scanning settings
@@ -133,11 +150,23 @@ func load_settings() -> void:
 	config.respect_gdignore = respect_gdignore
 	scan_addons = _get_setting(editor_settings, "code_quality/scanning/scan_addons", false)
 	config.scan_addons = scan_addons
-	remember_filter_selections = _get_setting(editor_settings, "code_quality/scanning/remember_filters", false)
+	remember_filter_selections = _get_setting(
+		editor_settings,
+		"code_quality/scanning/remember_filters",
+		false,
+	)
 	# Fall back to whatever load_from_json already populated on config, so a
 	# hand-edited gdlint.json isn't clobbered when EditorSettings has no override yet.
-	included_addons_text = _get_setting(editor_settings, "code_quality/scanning/included_addons", ", ".join(config.included_addons))
-	excluded_addons_text = _get_setting(editor_settings, "code_quality/scanning/excluded_addons", ", ".join(config.excluded_addons))
+	included_addons_text = _get_setting(
+		editor_settings,
+		"code_quality/scanning/included_addons",
+		", ".join(config.included_addons),
+	)
+	excluded_addons_text = _get_setting(
+		editor_settings,
+		"code_quality/scanning/excluded_addons",
+		", ".join(config.excluded_addons),
+	)
 	_update_config_addon_arrays()
 
 	# Load saved filter selections
@@ -146,24 +175,64 @@ func load_settings() -> void:
 	saved_file_filter = _get_setting(editor_settings, "code_quality/filters/file", "")
 
 	# Load analysis limits
-	config.line_limit_soft = _get_setting(editor_settings, "code_quality/limits/file_lines_warn", 200)
-	config.line_limit_hard = _get_setting(editor_settings, "code_quality/limits/file_lines_critical", 300)
-	config.function_line_limit = _get_setting(editor_settings, "code_quality/limits/function_lines", 30)
-	config.function_line_critical = _get_setting(editor_settings, "code_quality/limits/function_lines_crit", 60)
-	config.cyclomatic_warning = _get_setting(editor_settings, "code_quality/limits/complexity_warn", 10)
-	config.cyclomatic_critical = _get_setting(editor_settings, "code_quality/limits/complexity_crit", 15)
+	config.line_limit_soft = _get_setting(
+		editor_settings,
+		"code_quality/limits/file_lines_warn",
+		200,
+	)
+	config.line_limit_hard = _get_setting(
+		editor_settings,
+		"code_quality/limits/file_lines_critical",
+		300,
+	)
+	config.function_line_limit = _get_setting(
+		editor_settings,
+		"code_quality/limits/function_lines",
+		30,
+	)
+	config.function_line_critical = _get_setting(
+		editor_settings,
+		"code_quality/limits/function_lines_crit",
+		60,
+	)
+	config.cyclomatic_warning = _get_setting(
+		editor_settings,
+		"code_quality/limits/complexity_warn",
+		10,
+	)
+	config.cyclomatic_critical = _get_setting(
+		editor_settings,
+		"code_quality/limits/complexity_crit",
+		15,
+	)
 	config.max_parameters = _get_setting(editor_settings, "code_quality/limits/max_params", 4)
 	config.max_nesting = _get_setting(editor_settings, "code_quality/limits/max_nesting", 3)
-	config.god_class_functions = _get_setting(editor_settings, "code_quality/limits/god_class_funcs", 20)
-	config.god_class_signals = _get_setting(editor_settings, "code_quality/limits/god_class_signals", 10)
+	config.god_class_functions = _get_setting(
+		editor_settings,
+		"code_quality/limits/god_class_funcs",
+		20,
+	)
+	config.god_class_signals = _get_setting(
+		editor_settings,
+		"code_quality/limits/god_class_signals",
+		10,
+	)
 
 	# Load code checks settings
 	_load_check_settings(editor_settings)
 
 	# Load Claude Code settings
 	claude_code_enabled = _get_setting(editor_settings, "code_quality/claude/enabled", false)
-	claude_code_command = _get_setting(editor_settings, "code_quality/claude/launch_command", CLAUDE_CODE_DEFAULT_COMMAND)
-	claude_custom_instructions = _get_setting(editor_settings, "code_quality/claude/custom_instructions", CLAUDE_CODE_DEFAULT_INSTRUCTIONS)
+	claude_code_command = _get_setting(
+		editor_settings,
+		"code_quality/claude/launch_command",
+		CLAUDE_CODE_DEFAULT_COMMAND,
+	)
+	claude_custom_instructions = _get_setting(
+		editor_settings,
+		"code_quality/claude/custom_instructions",
+		CLAUDE_CODE_DEFAULT_INSTRUCTIONS,
+	)
 
 	# Apply to UI controls if they exist
 	_apply_to_ui()
@@ -212,47 +281,80 @@ func _apply_to_ui() -> void:
 	# Boolean controls (CheckBox/CheckButton)
 	var bool_mappings := {
 		# Display options
-		"show_issues_check": func(): return show_total_issues,
-		"show_debt_check": func(): return show_debt,
-		"show_json_export_check": func(): return show_json_export,
-		"show_html_export_check": func(): return show_html_export,
-		"show_md_export_check": func(): return show_md_export,
-		"show_ignored_check": func(): return show_ignored_issues,
-		"show_full_path_check": func(): return show_full_path,
+		"show_issues_check": func():
+			return show_total_issues,
+		"show_debt_check": func():
+			return show_debt,
+		"show_json_export_check": func():
+			return show_json_export,
+		"show_html_export_check": func():
+			return show_html_export,
+		"show_md_export_check": func():
+			return show_md_export,
+		"show_ignored_check": func():
+			return show_ignored_issues,
+		"show_full_path_check": func():
+			return show_full_path,
 		# Export options
-		"filter_exports_check": func(): return filter_exports,
-		"include_context_check": func(): return include_context_in_exports,
+		"filter_exports_check": func():
+			return filter_exports,
+		"include_context_check": func():
+			return include_context_in_exports,
 		# Scanning options (now in Code Checks card)
-		"respect_gdignore_check": func(): return respect_gdignore,
-		"scan_addons_check": func(): return scan_addons,
-		"remember_filters_check": func(): return remember_filter_selections,
+		"respect_gdignore_check": func():
+			return respect_gdignore,
+		"scan_addons_check": func():
+			return scan_addons,
+		"remember_filters_check": func():
+			return remember_filter_selections,
 		# Code checks - Naming
-		"check_naming_conventions": func(): return check_naming_conventions,
+		"check_naming_conventions": func():
+			return check_naming_conventions,
 		# Code checks - Style
-		"check_long_lines": func(): return check_long_lines,
-		"check_todo_comments": func(): return check_todo_comments,
-		"check_print_statements": func(): return check_print_statements,
-		"check_magic_numbers": func(): return check_magic_numbers,
-		"check_commented_code": func(): return check_commented_code,
-		"check_missing_types": func(): return check_missing_types,
+		"check_long_lines": func():
+			return check_long_lines,
+		"check_todo_comments": func():
+			return check_todo_comments,
+		"check_print_statements": func():
+			return check_print_statements,
+		"check_magic_numbers": func():
+			return check_magic_numbers,
+		"check_commented_code": func():
+			return check_commented_code,
+		"check_missing_types": func():
+			return check_missing_types,
 		# Code checks - Functions
-		"check_function_length": func(): return check_function_length,
-		"check_parameters": func(): return check_parameters,
-		"check_nesting": func(): return check_nesting,
-		"check_cyclomatic_complexity": func(): return check_cyclomatic_complexity,
-		"check_empty_functions": func(): return check_empty_functions,
-		"check_missing_return_type": func(): return check_missing_return_type,
+		"check_function_length": func():
+			return check_function_length,
+		"check_parameters": func():
+			return check_parameters,
+		"check_nesting": func():
+			return check_nesting,
+		"check_cyclomatic_complexity": func():
+			return check_cyclomatic_complexity,
+		"check_empty_functions": func():
+			return check_empty_functions,
+		"check_missing_return_type": func():
+			return check_missing_return_type,
 		# Code checks - Structure
-		"check_file_length": func(): return check_file_length,
-		"check_god_class": func(): return check_god_class,
-		"check_unused_variables": func(): return check_unused_variables,
-		"check_unused_parameters": func(): return check_unused_parameters,
+		"check_file_length": func():
+			return check_file_length,
+		"check_god_class": func():
+			return check_god_class,
+		"check_unused_variables": func():
+			return check_unused_variables,
+		"check_unused_parameters": func():
+			return check_unused_parameters,
 		# Code checks - Defensive
-		"check_ascii_only": func(): return check_ascii_only,
-		"check_strict_limits": func(): return check_strict_limits,
-		"check_sealed": func(): return check_sealed,
+		"check_ascii_only": func():
+			return check_ascii_only,
+		"check_strict_limits": func():
+			return check_strict_limits,
+		"check_sealed": func():
+			return check_sealed,
 		# Claude Code
-		"claude_enabled_check": func(): return claude_code_enabled,
+		"claude_enabled_check": func():
+			return claude_code_enabled,
 	}
 
 	for control_key in bool_mappings:
@@ -261,16 +363,26 @@ func _apply_to_ui() -> void:
 
 	# Numeric controls (SpinBox)
 	var spin_mappings := {
-		"max_lines_soft_spin": func(): return config.line_limit_soft,
-		"max_lines_hard_spin": func(): return config.line_limit_hard,
-		"max_func_lines_spin": func(): return config.function_line_limit,
-		"max_complexity_spin": func(): return config.cyclomatic_warning,
-		"func_lines_crit_spin": func(): return config.function_line_critical,
-		"max_complexity_crit_spin": func(): return config.cyclomatic_critical,
-		"max_params_spin": func(): return config.max_parameters,
-		"max_nesting_spin": func(): return config.max_nesting,
-		"god_class_funcs_spin": func(): return config.god_class_functions,
-		"god_class_signals_spin": func(): return config.god_class_signals,
+		"max_lines_soft_spin": func():
+			return config.line_limit_soft,
+		"max_lines_hard_spin": func():
+			return config.line_limit_hard,
+		"max_func_lines_spin": func():
+			return config.function_line_limit,
+		"max_complexity_spin": func():
+			return config.cyclomatic_warning,
+		"func_lines_crit_spin": func():
+			return config.function_line_critical,
+		"max_complexity_crit_spin": func():
+			return config.cyclomatic_critical,
+		"max_params_spin": func():
+			return config.max_parameters,
+		"max_nesting_spin": func():
+			return config.max_nesting,
+		"god_class_funcs_spin": func():
+			return config.god_class_functions,
+		"god_class_signals_spin": func():
+			return config.god_class_signals,
 	}
 
 	for control_key in spin_mappings:
@@ -279,11 +391,16 @@ func _apply_to_ui() -> void:
 
 	# Text controls (LineEdit/TextEdit)
 	var text_mappings := {
-		"claude_command_edit": func(): return claude_code_command,
-		"claude_instructions_edit": func(): return claude_custom_instructions,
-		"export_folder_edit": func(): return export_folder_path,
-		"included_addons_edit": func(): return included_addons_text,
-		"excluded_addons_edit": func(): return excluded_addons_text,
+		"claude_command_edit": func():
+			return claude_code_command,
+		"claude_instructions_edit": func():
+			return claude_custom_instructions,
+		"export_folder_edit": func():
+			return export_folder_path,
+		"included_addons_edit": func():
+			return included_addons_text,
+		"excluded_addons_edit": func():
+			return excluded_addons_text,
 	}
 
 	for control_key in text_mappings:
@@ -299,11 +416,20 @@ func connect_controls(export_btn: Button, html_export_btn: Button, md_export_btn
 	if controls.has("show_debt_check"):
 		controls.show_debt_check.toggled.connect(_on_show_debt_toggled)
 	if controls.has("show_json_export_check"):
-		controls.show_json_export_check.toggled.connect(func(pressed): _on_show_json_export_toggled(pressed, export_btn))
+		controls.show_json_export_check.toggled.connect(
+			func(pressed):
+				_on_show_json_export_toggled(pressed, export_btn),
+		)
 	if controls.has("show_html_export_check"):
-		controls.show_html_export_check.toggled.connect(func(pressed): _on_show_html_export_toggled(pressed, html_export_btn))
+		controls.show_html_export_check.toggled.connect(
+			func(pressed):
+				_on_show_html_export_toggled(pressed, html_export_btn),
+		)
 	if controls.has("show_md_export_check"):
-		controls.show_md_export_check.toggled.connect(func(pressed): _on_show_md_export_toggled(pressed, md_export_btn))
+		controls.show_md_export_check.toggled.connect(
+			func(pressed):
+				_on_show_md_export_toggled(pressed, md_export_btn),
+		)
 	if controls.has("filter_exports_check"):
 		controls.filter_exports_check.toggled.connect(_on_filter_exports_toggled)
 	if controls.has("include_context_check"):
@@ -358,7 +484,9 @@ func connect_controls(export_btn: Button, html_export_btn: Button, md_export_btn
 	if controls.has("claude_reset_button"):
 		controls.claude_reset_button.pressed.connect(_on_claude_command_reset_pressed)
 	if controls.has("claude_instructions_reset_button"):
-		controls.claude_instructions_reset_button.pressed.connect(_on_claude_instructions_reset_pressed)
+		controls.claude_instructions_reset_button.pressed.connect(
+			_on_claude_instructions_reset_pressed
+		)
 
 	# Export config button
 	if controls.has("export_config_btn"):
@@ -384,12 +512,13 @@ func save_setting(key: String, value: Variant) -> void:
 
 # Check if this setting affects analysis and should be synced to project config
 func _is_analysis_setting(key: String) -> bool:
-	return (key.begins_with("code_quality/limits/") or
-			key.begins_with("code_quality/checks/") or
-			key.begins_with("code_quality/scanning/respect_gdignore") or
-			key.begins_with("code_quality/scanning/scan_addons") or
-			key.begins_with("code_quality/scanning/included_addons") or
-			key.begins_with("code_quality/scanning/excluded_addons"))
+	return (
+		key.begins_with("code_quality/limits/") or key.begins_with("code_quality/checks/")
+		or key.begins_with("code_quality/scanning/respect_gdignore")
+		or key.begins_with("code_quality/scanning/scan_addons")
+		or key.begins_with("code_quality/scanning/included_addons")
+		or key.begins_with("code_quality/scanning/excluded_addons")
+	)
 
 
 # Sync current config state to gdlint.json in project root
@@ -398,8 +527,8 @@ func _sync_config_to_json() -> void:
 		return
 	config.save_to_json("res://gdlint.json")
 
-
 # ========== Display Options Handlers ==========
+
 
 func _on_show_issues_toggled(pressed: bool) -> void:
 	show_total_issues = pressed
@@ -538,8 +667,8 @@ func save_filter_selections(severity_index: int, type_id: String, file_text: Str
 	save_setting("code_quality/filters/type", type_id)
 	save_setting("code_quality/filters/file", file_text)
 
-
 # ========== Claude Code Handlers ==========
+
 
 func _on_claude_enabled_toggled(pressed: bool) -> void:
 	claude_code_enabled = pressed
@@ -571,8 +700,8 @@ func _on_claude_instructions_reset_pressed() -> void:
 		controls.claude_instructions_edit.text = CLAUDE_CODE_DEFAULT_INSTRUCTIONS
 	save_setting("code_quality/claude/custom_instructions", CLAUDE_CODE_DEFAULT_INSTRUCTIONS)
 
-
 # ========== Config Export Handlers ==========
+
 
 func _on_export_config_pressed() -> void:
 	export_config_requested.emit()
@@ -585,8 +714,8 @@ func export_config_to_path(file_path: String) -> bool:
 		return false
 	return config.save_to_json(file_path)
 
-
 # ========== Code Checks Handlers ==========
+
 
 # Connect all individual check toggle signals
 func _connect_check_signals() -> void:
@@ -617,7 +746,8 @@ func _connect_check_signals() -> void:
 		if controls.has(control_key):
 			var setting_suffix: String = check_mappings[control_key]
 			controls[control_key].toggled.connect(
-				func(pressed): _on_check_toggled(control_key, setting_suffix, pressed)
+				func(pressed):
+					_on_check_toggled(control_key, setting_suffix, pressed),
 			)
 
 

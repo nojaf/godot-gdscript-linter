@@ -34,17 +34,17 @@ extends Resource
 @export var check_naming_conventions: bool = true
 @export var check_unused_variables: bool = true
 @export var check_unused_parameters: bool = true
-@export var check_missing_return_type: bool = true  # Public functions without return type annotation
-@export var ignore_underscore_prefix: bool = true  # Skip _var names as intentionally unused
-@export var check_ascii_only: bool = true          # Enable #@ascii_only per-file attribute
-@export var ascii_only_project_wide: bool = false   # When true, all files checked for ASCII
-@export var check_strict_limits: bool = true        # Enable gdlint:strict directives
-@export var check_sealed: bool = true               # Enable #@Sealed class protection
+@export var check_missing_return_type: bool = true # Public functions without return type annotation
+@export var ignore_underscore_prefix: bool = true # Skip _var names as intentionally unused
+@export var check_ascii_only: bool = true # Enable #@ascii_only per-file attribute
+@export var ascii_only_project_wide: bool = false # When true, all files checked for ASCII
+@export var check_strict_limits: bool = true # Enable gdlint:strict directives
+@export var check_sealed: bool = true # Enable #@Sealed class protection
 
 # Scanning options
-@export var respect_gdignore: bool = true  # Skip directories containing .gdignore files
-@export var scan_addons: bool = false  # Include addons/ folder in scans (disabled by default)
-@export var respect_ignore_directives: bool = true  # Process gdlint:ignore comments (false = show all issues)
+@export var respect_gdignore: bool = true # Skip directories containing .gdignore files
+@export var scan_addons: bool = false # Include addons/ folder in scans (disabled by default)
+@export var respect_ignore_directives: bool = true # Process gdlint:ignore comments (false = show all issues)
 
 # Per-addon scoping (addon folder names, not full paths)
 # Precedence: included_addons non-empty → scan ONLY those addons (overrides scan_addons)
@@ -63,18 +63,13 @@ extends Resource
 @export var god_class_exports: int = 15
 
 # Paths to exclude from analysis
-@export var excluded_paths: Array[String] = [
-	"addons/",
-	".godot/",
-	"tests/mocks/",
-	"screenshots/"
-]
+@export var excluded_paths: Array[String] = ["addons/", ".godot/", "tests/mocks/", "screenshots/"]
 
 # Patterns for TODO detection
 var todo_patterns: Array[String] = ["TODO", "FIXME", "HACK", "XXX", "BUG", "TEMP"]
 
 # Patterns for print detection (whitelist DebugLogger)
-var print_patterns: Array[String] = ["print(", "print_debug(", "prints(", "printt(", "printraw("]  # gdlint:ignore-line:print-statement
+var print_patterns: Array[String] = ["print(", "print_debug(", "prints(", "printt(", "printraw("] # gdlint:ignore-line:print-statement
 var print_whitelist: Array[String] = ["DebugLogger"]
 
 # Allowed magic numbers (won't be flagged)
@@ -83,10 +78,26 @@ var allowed_numbers: Array = [0, 1, -1, 2, 0.0, 1.0, 0.5, 2.0, -1.0, 100, 255, 1
 
 # Patterns that indicate commented-out code (not regular comments)
 var commented_code_patterns: Array[String] = [
-	"#var ", "#func ", "#if ", "#for ", "#while ", "#match ", "#return ",
-	"#elif ", "#else:", "#class ", "#signal ", "#const ", "#@export",
-	"#.connect(", "#.emit(", "#await ", "#preload(", "#load("
+	"#var ",
+	"#func ",
+	"#if ",
+	"#for ",
+	"#while ",
+	"#match ",
+	"#return ",
+	"#elif ",
+	"#else:",
+	"#class ",
+	"#signal ",
+	"#const ",
+	"#@export",
+	"#.connect(",
+	"#.emit(",
+	"#await ",
+	"#preload(",
+	"#load(",
 ]
+
 
 static func get_default():
 	var config = load("res://addons/gdscript-linter/analyzer/analysis-config.gd").new()
@@ -127,53 +138,91 @@ func load_project_config(project_path: String = "res://") -> void:
 
 func _apply_config_value(section: String, key: String, value: String) -> void:
 	match section:
-		"limits": _apply_limits_value(key, value)
-		"checks": _apply_checks_value(key, value)
-		"scanning": _apply_scanning_value(key, value)
-		"exclude": _apply_exclude_value(key, value)
+		"limits":
+			_apply_limits_value(key, value)
+		"checks":
+			_apply_checks_value(key, value)
+		"scanning":
+			_apply_scanning_value(key, value)
+		"exclude":
+			_apply_exclude_value(key, value)
 
 
 func _apply_limits_value(key: String, value: String) -> void:
 	match key:
-		"file_lines_soft": line_limit_soft = int(value)
-		"file_lines_hard": line_limit_hard = int(value)
-		"function_lines": function_line_limit = int(value)
-		"function_lines_critical": function_line_critical = int(value)
-		"max_parameters": max_parameters = int(value)
-		"max_nesting": max_nesting = int(value)
-		"max_line_length": max_line_length = int(value)
-		"cyclomatic_warning": cyclomatic_warning = int(value)
-		"cyclomatic_critical": cyclomatic_critical = int(value)
-		"god_class_functions": god_class_functions = int(value)
-		"god_class_signals": god_class_signals = int(value)
+		"file_lines_soft":
+			line_limit_soft = int(value)
+		"file_lines_hard":
+			line_limit_hard = int(value)
+		"function_lines":
+			function_line_limit = int(value)
+		"function_lines_critical":
+			function_line_critical = int(value)
+		"max_parameters":
+			max_parameters = int(value)
+		"max_nesting":
+			max_nesting = int(value)
+		"max_line_length":
+			max_line_length = int(value)
+		"cyclomatic_warning":
+			cyclomatic_warning = int(value)
+		"cyclomatic_critical":
+			cyclomatic_critical = int(value)
+		"god_class_functions":
+			god_class_functions = int(value)
+		"god_class_signals":
+			god_class_signals = int(value)
 
 
 func _apply_checks_value(key: String, value: String) -> void:
 	var enabled := value.to_lower() in ["true", "1", "yes", "on"]
 	match key:
-		"file_length": check_file_length = enabled
-		"function_length": check_function_length = enabled
-		"cyclomatic_complexity": check_cyclomatic_complexity = enabled
-		"parameters": check_parameters = enabled
-		"nesting": check_nesting = enabled
-		"todo_comments": check_todo_comments = enabled
-		"print_statements": check_print_statements = enabled
-		"empty_functions": check_empty_functions = enabled
-		"magic_numbers": check_magic_numbers = enabled
-		"commented_code": check_commented_code = enabled
-		"missing_types": check_missing_types = enabled
-		"god_class": check_god_class = enabled
-		"long_lines": check_long_lines = enabled
-		"naming_conventions": check_naming_conventions = enabled
-		"unused_variables": check_unused_variables = enabled
-		"unused_parameters": check_unused_parameters = enabled
-		"missing_return_type": check_missing_return_type = enabled
-		"ignore_underscore_prefix": ignore_underscore_prefix = enabled
-		"respect_gdignore": respect_gdignore = enabled
-		"ascii_only": check_ascii_only = enabled
-		"ascii_only_project_wide": ascii_only_project_wide = enabled
-		"strict_limits": check_strict_limits = enabled
-		"sealed": check_sealed = enabled
+		"file_length":
+			check_file_length = enabled
+		"function_length":
+			check_function_length = enabled
+		"cyclomatic_complexity":
+			check_cyclomatic_complexity = enabled
+		"parameters":
+			check_parameters = enabled
+		"nesting":
+			check_nesting = enabled
+		"todo_comments":
+			check_todo_comments = enabled
+		"print_statements":
+			check_print_statements = enabled
+		"empty_functions":
+			check_empty_functions = enabled
+		"magic_numbers":
+			check_magic_numbers = enabled
+		"commented_code":
+			check_commented_code = enabled
+		"missing_types":
+			check_missing_types = enabled
+		"god_class":
+			check_god_class = enabled
+		"long_lines":
+			check_long_lines = enabled
+		"naming_conventions":
+			check_naming_conventions = enabled
+		"unused_variables":
+			check_unused_variables = enabled
+		"unused_parameters":
+			check_unused_parameters = enabled
+		"missing_return_type":
+			check_missing_return_type = enabled
+		"ignore_underscore_prefix":
+			ignore_underscore_prefix = enabled
+		"respect_gdignore":
+			respect_gdignore = enabled
+		"ascii_only":
+			check_ascii_only = enabled
+		"ascii_only_project_wide":
+			ascii_only_project_wide = enabled
+		"strict_limits":
+			check_strict_limits = enabled
+		"sealed":
+			check_sealed = enabled
 
 
 func _apply_scanning_value(key: String, value: String) -> void:
@@ -282,9 +331,7 @@ func save_to_json(path: String) -> bool:
 			"included_addons": included_addons,
 			"excluded_addons": excluded_addons,
 		},
-		"exclude": {
-			"paths": excluded_paths,
-		},
+		"exclude": { "paths": excluded_paths },
 	}
 
 	var json_string := JSON.stringify(data, "\t")
@@ -316,7 +363,9 @@ func load_from_json(path: String) -> bool:
 	var json := JSON.new()
 	var parse_result := json.parse(json_string)
 	if parse_result != OK:
-		push_error("GDLint: Failed to parse JSON config at %s: %s" % [path, json.get_error_message()])
+		push_error(
+			"GDLint: Failed to parse JSON config at %s: %s" % [path, json.get_error_message()]
+		)
 		return false
 
 	var data: Dictionary = json.data
@@ -327,51 +376,88 @@ func load_from_json(path: String) -> bool:
 	# Apply limits
 	if data.has("limits"):
 		var limits: Dictionary = data.limits
-		if limits.has("file_lines_soft"): line_limit_soft = int(limits.file_lines_soft)
-		if limits.has("file_lines_hard"): line_limit_hard = int(limits.file_lines_hard)
-		if limits.has("function_lines"): function_line_limit = int(limits.function_lines)
-		if limits.has("function_lines_critical"): function_line_critical = int(limits.function_lines_critical)
-		if limits.has("max_parameters"): max_parameters = int(limits.max_parameters)
-		if limits.has("max_nesting"): max_nesting = int(limits.max_nesting)
-		if limits.has("max_line_length"): max_line_length = int(limits.max_line_length)
-		if limits.has("cyclomatic_warning"): cyclomatic_warning = int(limits.cyclomatic_warning)
-		if limits.has("cyclomatic_critical"): cyclomatic_critical = int(limits.cyclomatic_critical)
-		if limits.has("god_class_functions"): god_class_functions = int(limits.god_class_functions)
-		if limits.has("god_class_signals"): god_class_signals = int(limits.god_class_signals)
-		if limits.has("god_class_exports"): god_class_exports = int(limits.god_class_exports)
+		if limits.has("file_lines_soft"):
+			line_limit_soft = int(limits.file_lines_soft)
+		if limits.has("file_lines_hard"):
+			line_limit_hard = int(limits.file_lines_hard)
+		if limits.has("function_lines"):
+			function_line_limit = int(limits.function_lines)
+		if limits.has("function_lines_critical"):
+			function_line_critical = int(limits.function_lines_critical)
+		if limits.has("max_parameters"):
+			max_parameters = int(limits.max_parameters)
+		if limits.has("max_nesting"):
+			max_nesting = int(limits.max_nesting)
+		if limits.has("max_line_length"):
+			max_line_length = int(limits.max_line_length)
+		if limits.has("cyclomatic_warning"):
+			cyclomatic_warning = int(limits.cyclomatic_warning)
+		if limits.has("cyclomatic_critical"):
+			cyclomatic_critical = int(limits.cyclomatic_critical)
+		if limits.has("god_class_functions"):
+			god_class_functions = int(limits.god_class_functions)
+		if limits.has("god_class_signals"):
+			god_class_signals = int(limits.god_class_signals)
+		if limits.has("god_class_exports"):
+			god_class_exports = int(limits.god_class_exports)
 
 	# Apply checks
 	if data.has("checks"):
 		var checks: Dictionary = data.checks
-		if checks.has("file_length"): check_file_length = bool(checks.file_length)
-		if checks.has("function_length"): check_function_length = bool(checks.function_length)
-		if checks.has("parameters"): check_parameters = bool(checks.parameters)
-		if checks.has("nesting"): check_nesting = bool(checks.nesting)
-		if checks.has("todo_comments"): check_todo_comments = bool(checks.todo_comments)
-		if checks.has("long_lines"): check_long_lines = bool(checks.long_lines)
-		if checks.has("print_statements"): check_print_statements = bool(checks.print_statements)
-		if checks.has("empty_functions"): check_empty_functions = bool(checks.empty_functions)
-		if checks.has("magic_numbers"): check_magic_numbers = bool(checks.magic_numbers)
-		if checks.has("commented_code"): check_commented_code = bool(checks.commented_code)
-		if checks.has("missing_types"): check_missing_types = bool(checks.missing_types)
-		if checks.has("cyclomatic_complexity"): check_cyclomatic_complexity = bool(checks.cyclomatic_complexity)
-		if checks.has("god_class"): check_god_class = bool(checks.god_class)
-		if checks.has("naming_conventions"): check_naming_conventions = bool(checks.naming_conventions)
-		if checks.has("unused_variables"): check_unused_variables = bool(checks.unused_variables)
-		if checks.has("unused_parameters"): check_unused_parameters = bool(checks.unused_parameters)
-		if checks.has("missing_return_type"): check_missing_return_type = bool(checks.missing_return_type)
-		if checks.has("ignore_underscore_prefix"): ignore_underscore_prefix = bool(checks.ignore_underscore_prefix)
-		if checks.has("ascii_only"): check_ascii_only = bool(checks.ascii_only)
-		if checks.has("ascii_only_project_wide"): ascii_only_project_wide = bool(checks.ascii_only_project_wide)
-		if checks.has("strict_limits"): check_strict_limits = bool(checks.strict_limits)
-		if checks.has("sealed"): check_sealed = bool(checks.sealed)
+		if checks.has("file_length"):
+			check_file_length = bool(checks.file_length)
+		if checks.has("function_length"):
+			check_function_length = bool(checks.function_length)
+		if checks.has("parameters"):
+			check_parameters = bool(checks.parameters)
+		if checks.has("nesting"):
+			check_nesting = bool(checks.nesting)
+		if checks.has("todo_comments"):
+			check_todo_comments = bool(checks.todo_comments)
+		if checks.has("long_lines"):
+			check_long_lines = bool(checks.long_lines)
+		if checks.has("print_statements"):
+			check_print_statements = bool(checks.print_statements)
+		if checks.has("empty_functions"):
+			check_empty_functions = bool(checks.empty_functions)
+		if checks.has("magic_numbers"):
+			check_magic_numbers = bool(checks.magic_numbers)
+		if checks.has("commented_code"):
+			check_commented_code = bool(checks.commented_code)
+		if checks.has("missing_types"):
+			check_missing_types = bool(checks.missing_types)
+		if checks.has("cyclomatic_complexity"):
+			check_cyclomatic_complexity = bool(checks.cyclomatic_complexity)
+		if checks.has("god_class"):
+			check_god_class = bool(checks.god_class)
+		if checks.has("naming_conventions"):
+			check_naming_conventions = bool(checks.naming_conventions)
+		if checks.has("unused_variables"):
+			check_unused_variables = bool(checks.unused_variables)
+		if checks.has("unused_parameters"):
+			check_unused_parameters = bool(checks.unused_parameters)
+		if checks.has("missing_return_type"):
+			check_missing_return_type = bool(checks.missing_return_type)
+		if checks.has("ignore_underscore_prefix"):
+			ignore_underscore_prefix = bool(checks.ignore_underscore_prefix)
+		if checks.has("ascii_only"):
+			check_ascii_only = bool(checks.ascii_only)
+		if checks.has("ascii_only_project_wide"):
+			ascii_only_project_wide = bool(checks.ascii_only_project_wide)
+		if checks.has("strict_limits"):
+			check_strict_limits = bool(checks.strict_limits)
+		if checks.has("sealed"):
+			check_sealed = bool(checks.sealed)
 
 	# Apply scanning options
 	if data.has("scanning"):
 		var scanning: Dictionary = data.scanning
-		if scanning.has("respect_gdignore"): respect_gdignore = bool(scanning.respect_gdignore)
-		if scanning.has("scan_addons"): scan_addons = bool(scanning.scan_addons)
-		if scanning.has("respect_ignore_directives"): respect_ignore_directives = bool(scanning.respect_ignore_directives)
+		if scanning.has("respect_gdignore"):
+			respect_gdignore = bool(scanning.respect_gdignore)
+		if scanning.has("scan_addons"):
+			scan_addons = bool(scanning.scan_addons)
+		if scanning.has("respect_ignore_directives"):
+			respect_ignore_directives = bool(scanning.respect_ignore_directives)
 		if scanning.has("included_addons") and scanning.included_addons is Array:
 			included_addons.clear()
 			for a in scanning.included_addons:

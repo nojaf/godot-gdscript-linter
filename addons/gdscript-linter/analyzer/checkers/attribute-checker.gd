@@ -6,7 +6,7 @@ extends RefCounted
 
 var config
 
-const SCAN_LIMIT := 10  # Only scan first 10 lines for attributes
+const SCAN_LIMIT := 10 # Only scan first 10 lines for attributes
 
 
 func _init(p_config) -> void:
@@ -35,10 +35,12 @@ func check_ascii(lines: Array) -> Array:
 			var char_found: String = result.get_string()
 			var codepoint := char_found.unicode_at(0)
 			var line_num := i + 1
-			issues.append({
-				"line": line_num,
-				"severity": "warning",
-				"check_id": "ascii-violation",
-				"message": "Non-ASCII character found: U+%04X" % codepoint
-			})
+			issues.append(
+				{
+					"line": line_num,
+					"severity": "warning",
+					"check_id": "ascii-violation",
+					"message": "Non-ASCII character found: U+%04X" % codepoint,
+				}
+			)
 	return issues

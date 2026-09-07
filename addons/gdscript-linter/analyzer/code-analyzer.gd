@@ -23,7 +23,7 @@ var _style_checker: GDLintStyleChecker
 var _attribute_checker: GDLintAttributeChecker
 
 # Sealed class registry (class_name -> file_path)
-var _sealed_classes: Dictionary = {}
+var _sealed_classes: Dictionary = { }
 
 
 func _init(p_config = null) -> void:
@@ -77,17 +77,30 @@ func analyze_content(content: String, file_path: String):
 	var file_result = FileResultClass.create(file_path, lines.size())
 
 	_analyze_file_level(lines, file_path, file_result)
-	_function_checker.analyze_functions(lines, file_result, _create_add_issue_callback(file_path), _create_pinned_issue_callback(file_path))
+	_function_checker.analyze_functions(
+		lines,
+		file_result,
+		_create_add_issue_callback(file_path),
+		_create_pinned_issue_callback(file_path),
+	)
 	_check_god_class(file_path, file_result)
 	_unused_checker.check_unused(lines, _create_add_issue_callback(file_path))
 
 	# ASCII-only check
 	if config.check_ascii_only:
-		var check_ascii: bool = config.ascii_only_project_wide or _attribute_checker.has_ascii_only_attribute(lines)
+		var check_ascii: bool = (
+			config.ascii_only_project_wide or _attribute_checker.has_ascii_only_attribute(lines)
+		)
 		if check_ascii:
 			var ascii_issues: Array = _attribute_checker.check_ascii(lines)
 			for issue in ascii_issues:
-				_add_issue(file_path, issue.line, _severity_from_string(issue.severity), issue.check_id, issue.message)
+				_add_issue(
+					file_path,
+					issue.line,
+					_severity_from_string(issue.severity),
+					issue.check_id,
+					issue.message,
+				)
 
 	_calculate_debt_score(file_result)
 
@@ -103,11 +116,34 @@ func _create_add_issue_callback(file_path: String) -> Callable:
 
 
 func _create_pinned_issue_callback(file_path: String) -> Callable:
-	return func(line_num: int, severity: String, check_id: String, message: String, actual_value: int, limit: int, context: String) -> void:
-		_add_pinned_issue_from_checker(file_path, line_num, severity, check_id, message, actual_value, limit, context)
+	return func(
+		line_num: int,
+		severity: String,
+		check_id: String,
+		message: String,
+		actual_value: int,
+		limit: int,
+		context: String,
+	) -> void:
+		_add_pinned_issue_from_checker(
+			file_path,
+			line_num,
+			severity,
+			check_id,
+			message,
+			actual_value,
+			limit,
+			context,
+		)
 
 
-func _add_issue_from_checker(file_path: String, line_num: int, severity: String, check_id: String, message: String) -> void:
+func _add_issue_from_checker(
+	file_path: String,
+	line_num: int,
+	severity: String,
+	check_id: String,
+	message: String,
+) -> void:
 	var sev = _severity_from_string(severity)
 	var issue = IssueClass.create(file_path, line_num, sev, check_id, message)
 	if config.respect_ignore_directives and _ignore_handler.should_ignore(line_num, check_id):
@@ -123,14 +159,23 @@ func _add_issue_from_checker(file_path: String, line_num: int, severity: String,
 # than the global limit by definition and is the only thing that can object to a
 # value the global limits allow. Deciding that at the call site would mean the
 # case a stricter limit exists for could never reach this function.
-func _add_pinned_issue_from_checker(file_path: String, line_num: int, severity: String, check_id: String, message: String, actual_value: int, limit: int, context: String) -> void:
+func _add_pinned_issue_from_checker(
+	file_path: String,
+	line_num: int,
+	severity: String,
+	check_id: String,
+	message: String,
+	actual_value: int,
+	limit: int,
+	context: String,
+) -> void:
 	# A strict override replaces the normal check entirely, whether or not the
 	# value exceeds it.
 	if _apply_strict_limit(file_path, line_num, check_id, context, actual_value):
 		return
 
 	if severity.is_empty():
-		return  # inside the global limits, and no strict directive objected
+		return # inside the global limits, and no strict directive objected
 
 	# Bypass ignore handling if disabled
 	if not config.respect_ignore_directives:
@@ -149,18 +194,51 @@ func _add_pinned_issue_from_checker(file_path: String, line_num: int, severity: 
 			result.add_ignored_issue(issue)
 		"exceeded":
 			# Value exceeded pinned amount - report as warning
-			var exceeded_msg := "%s exceeded pinned limit (%d → %d, limit is %d)" % [context, pin_result.pinned, actual_value, limit]
-			var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.WARNING, check_id + "-exceeded", exceeded_msg)
+			var exceeded_msg := "%s exceeded pinned limit (%d → %d, limit is %d)" % [
+				context,
+				pin_result.pinned,
+				actual_value,
+				limit,
+			]
+			var issue = IssueClass.create(
+				file_path,
+				line_num,
+				IssueClass.Severity.WARNING,
+				check_id + "-exceeded",
+				exceeded_msg,
+			)
 			result.add_issue(issue)
 		"improved":
 			# Value improved but still over limit - report as info
-			var improved_msg := "%s now %d (was pinned at %d, limit is %d) - consider tightening" % [context, actual_value, pin_result.pinned, limit]
-			var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.INFO, check_id + "-improved", improved_msg)
+			var improved_msg := "%s now %d (was pinned at %d, limit is %d) - consider tightening" % [
+				context,
+				actual_value,
+				pin_result.pinned,
+				limit,
+			]
+			var issue = IssueClass.create(
+				file_path,
+				line_num,
+				IssueClass.Severity.INFO,
+				check_id + "-improved",
+				improved_msg,
+			)
 			result.add_issue(issue)
 		"unnecessary":
 			# Value is now within limit - ignore is unnecessary
-			var unnecessary_msg := "Pinned ignore for %s is now unnecessary (%s is %d, limit is %d)" % [check_id, context, actual_value, limit]
-			var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.INFO, check_id + "-unnecessary", unnecessary_msg)
+			var unnecessary_msg := "Pinned ignore for %s is now unnecessary (%s is %d, limit is %d)" % [
+				check_id,
+				context,
+				actual_value,
+				limit,
+			]
+			var issue = IssueClass.create(
+				file_path,
+				line_num,
+				IssueClass.Severity.INFO,
+				check_id + "-unnecessary",
+				unnecessary_msg,
+			)
 			result.add_issue(issue)
 		"normal":
 			# No ignore directive - process normally
@@ -171,13 +249,23 @@ func _add_pinned_issue_from_checker(file_path: String, line_num: int, severity: 
 
 func _severity_from_string(severity: String) -> int:
 	match severity:
-		"critical": return IssueClass.Severity.CRITICAL
-		"warning": return IssueClass.Severity.WARNING
-		"info": return IssueClass.Severity.INFO
-		_: return IssueClass.Severity.INFO
+		"critical":
+			return IssueClass.Severity.CRITICAL
+		"warning":
+			return IssueClass.Severity.WARNING
+		"info":
+			return IssueClass.Severity.INFO
+		_:
+			return IssueClass.Severity.INFO
 
 
-func _add_issue(file_path: String, line_num: int, severity, check_id: String, message: String) -> void:
+func _add_issue(
+	file_path: String,
+	line_num: int,
+	severity,
+	check_id: String,
+	message: String,
+) -> void:
 	var issue = IssueClass.create(file_path, line_num, severity, check_id, message)
 	if config.respect_ignore_directives and _ignore_handler.should_ignore(line_num, check_id):
 		result.add_ignored_issue(issue)
@@ -187,7 +275,10 @@ func _add_issue(file_path: String, line_num: int, severity, check_id: String, me
 
 func _scan_directory(path: String) -> void:
 	var normalized_path := path
-	if OS.has_feature("windows") and not path.begins_with("res://") and not path.begins_with("user://"):
+	if (
+		OS.has_feature("windows") and not path.begins_with("res://")
+		and not path.begins_with("user://")
+	):
 		normalized_path = path.replace("/", "\\")
 	var dir := DirAccess.open(normalized_path)
 	if not dir:
@@ -221,7 +312,10 @@ func _scan_directory(path: String) -> void:
 func _collect_gd_files(path: String) -> Array[String]:
 	var files: Array[String] = []
 	var normalized_path := path
-	if OS.has_feature("windows") and not path.begins_with("res://") and not path.begins_with("user://"):
+	if (
+		OS.has_feature("windows") and not path.begins_with("res://")
+		and not path.begins_with("user://")
+	):
 		normalized_path = path.replace("/", "\\")
 	var dir := DirAccess.open(normalized_path)
 	if not dir:
@@ -267,7 +361,11 @@ func _scan_for_sealed_classes(file_paths: Array[String]) -> void:
 			if lines[i].strip_edges() == "#@Sealed":
 				var next_line := lines[i + 1].strip_edges()
 				if GDLintDeclarationSyntax.declares(next_line, "class_name"):
-					var class_name_str := GDLintDeclarationSyntax.after_keyword(next_line, "class_name").split(" ")[0].strip_edges()
+					var after_keyword := GDLintDeclarationSyntax.after_keyword(
+						next_line,
+						"class_name",
+					)
+					var class_name_str := after_keyword.split(" ")[0].strip_edges()
 					_sealed_classes[class_name_str] = file_path
 
 
@@ -287,28 +385,52 @@ func _analyze_file_level(lines: Array, file_path: String, file_result) -> void:
 		# Sealed class violation check
 		if config.check_sealed and not _sealed_classes.is_empty():
 			if GDLintDeclarationSyntax.declares(trimmed, "extends"):
-				var extends_target := GDLintDeclarationSyntax.after_keyword(trimmed, "extends").split(" ")[0].strip_edges()
+				var after_keyword := GDLintDeclarationSyntax.after_keyword(trimmed, "extends")
+				var extends_target := after_keyword.split(" ")[0].strip_edges()
 				if _sealed_classes.has(extends_target):
 					var sealed_file: String = _sealed_classes[extends_target]
-					_add_issue(file_path, line_num, IssueClass.Severity.CRITICAL, "sealed-violation",
-						"Cannot extend '%s' - class is marked as #@Sealed (defined in %s)" % [extends_target, sealed_file])
+					_add_issue(
+						file_path,
+						line_num,
+						IssueClass.Severity.CRITICAL,
+						"sealed-violation",
+						"Cannot extend '%s' - class is marked as #@Sealed (defined in %s)"
+						% [extends_target, sealed_file],
+					)
 
 		# Style checks (long lines, TODO, print, magic numbers, etc.)
 		var style_issues := _style_checker.check_line(line, trimmed, line_num, file_result)
 		for issue in style_issues:
-			_add_issue(file_path, issue.line, _severity_from_string(issue.severity), issue.check_id, issue.message)
+			_add_issue(
+				file_path,
+				issue.line,
+				_severity_from_string(issue.severity),
+				issue.check_id,
+				issue.message,
+			)
 
 		# Naming convention checks
 		if config.check_naming_conventions:
 			var naming_issues := _naming_checker.check_line(line, line_num)
 			for issue in naming_issues:
-				_add_issue(file_path, issue.line, _severity_from_string(issue.severity), issue.check_id, issue.message)
+				_add_issue(
+					file_path,
+					issue.line,
+					_severity_from_string(issue.severity),
+					issue.check_id,
+					issue.message,
+				)
 
 
 # True when a strict directive covers this check here, which means it decides
 # the outcome and the normal thresholds do not apply.
-func _apply_strict_limit(file_path: String, line_num: int, check_id: String,
-		context: String, actual_value: int) -> bool:
+func _apply_strict_limit(
+	file_path: String,
+	line_num: int,
+	check_id: String,
+	context: String,
+	actual_value: int,
+) -> bool:
 	if not config.check_strict_limits:
 		return false
 	var strict_limit: int = _strict_handler.get_strict_limit(line_num, check_id)
@@ -317,9 +439,17 @@ func _apply_strict_limit(file_path: String, line_num: int, check_id: String,
 
 	if actual_value > strict_limit:
 		var msg := "%s exceeds strict limit (%d/%d)" % [context, actual_value, strict_limit]
-		var issue = IssueClass.create(file_path, line_num, IssueClass.Severity.CRITICAL,
-			"strict-limit", msg)
-		if config.respect_ignore_directives and _ignore_handler.should_ignore(line_num, "strict-limit"):
+		var issue = IssueClass.create(
+			file_path,
+			line_num,
+			IssueClass.Severity.CRITICAL,
+			"strict-limit",
+			msg,
+		)
+		if (
+			config.respect_ignore_directives
+			and _ignore_handler.should_ignore(line_num, "strict-limit")
+		):
 			result.add_ignored_issue(issue)
 		else:
 			result.add_issue(issue)
@@ -329,18 +459,40 @@ func _apply_strict_limit(file_path: String, line_num: int, check_id: String,
 func _check_file_length(file_path: String, line_count: int) -> void:
 	var context := "File"
 	if line_count > config.line_limit_hard:
-		_add_pinned_issue_from_checker(file_path, 1, "critical", "file-length",
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"critical",
+			"file-length",
 			"File exceeds %d lines (%d)" % [config.line_limit_hard, line_count],
-			line_count, config.line_limit_hard, context)
+			line_count,
+			config.line_limit_hard,
+			context,
+		)
 	elif line_count > config.line_limit_soft:
-		_add_pinned_issue_from_checker(file_path, 1, "warning", "file-length",
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"warning",
+			"file-length",
 			"File exceeds %d lines (%d)" % [config.line_limit_soft, line_count],
-			line_count, config.line_limit_soft, context)
+			line_count,
+			config.line_limit_soft,
+			context,
+		)
 	else:
 		# Inside both limits, so offered rather than reported. Only a strict
 		# directive can object to a file this size.
-		_add_pinned_issue_from_checker(file_path, 1, "", "file-length", "",
-			line_count, config.line_limit_soft, context)
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"",
+			"file-length",
+			"",
+			line_count,
+			config.line_limit_soft,
+			context,
+		)
 
 
 func _check_god_class(file_path: String, file_result) -> void:
@@ -357,21 +509,51 @@ func _check_god_class(file_path: String, file_result) -> void:
 
 	# Check public functions limit
 	if public_funcs > config.god_class_functions:
-		_add_pinned_issue_from_checker(file_path, 1, "warning", "god-class-functions",
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"warning",
+			"god-class-functions",
 			"God class: %d public functions (max %d)" % [public_funcs, config.god_class_functions],
-			public_funcs, config.god_class_functions, "Public functions")
+			public_funcs,
+			config.god_class_functions,
+			"Public functions",
+		)
 	else:
-		_add_pinned_issue_from_checker(file_path, 1, "", "god-class-functions", "",
-			public_funcs, config.god_class_functions, "Public functions")
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"",
+			"god-class-functions",
+			"",
+			public_funcs,
+			config.god_class_functions,
+			"Public functions",
+		)
 
 	# Check signals limit
 	if signal_count > config.god_class_signals:
-		_add_pinned_issue_from_checker(file_path, 1, "warning", "god-class-signals",
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"warning",
+			"god-class-signals",
 			"God class: %d signals (max %d)" % [signal_count, config.god_class_signals],
-			signal_count, config.god_class_signals, "Signals")
+			signal_count,
+			config.god_class_signals,
+			"Signals",
+		)
 	else:
-		_add_pinned_issue_from_checker(file_path, 1, "", "god-class-signals", "",
-			signal_count, config.god_class_signals, "Signals")
+		_add_pinned_issue_from_checker(
+			file_path,
+			1,
+			"",
+			"god-class-signals",
+			"",
+			signal_count,
+			config.god_class_signals,
+			"Signals",
+		)
 
 
 func _calculate_debt_score(file_result) -> void:

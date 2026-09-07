@@ -7,14 +7,14 @@ extends RefCounted
 
 const STRICT_FUNCTION_PATTERN := "gdlint:strict-function"
 const STRICT_FILE_PATTERN := "gdlint:strict-file"
-const SCAN_LIMIT := 10  # Only scan first 10 lines for file-level directives
+const SCAN_LIMIT := 10 # Only scan first 10 lines for file-level directives
 
 # Regex pattern: gdlint:strict-(function|file):check-id=value
 const STRICT_REGEX_PATTERN := "gdlint:strict-(?:function|file):(\\w[\\w-]*)=(\\d+)"
 
 # Parsed data
-var _file_strict_limits: Dictionary = {}     # check_id -> limit value (file-scope)
-var _function_strict_ranges: Array = []       # [{start: int, end: int, check_id: String, limit: int}]
+var _file_strict_limits: Dictionary = { } # check_id -> limit value (file-scope)
+var _function_strict_ranges: Array = [] # [{start: int, end: int, check_id: String, limit: int}]
 
 
 func initialize(lines: Array) -> void:
@@ -24,7 +24,7 @@ func initialize(lines: Array) -> void:
 
 
 func clear() -> void:
-	_file_strict_limits = {}
+	_file_strict_limits = { }
 	_function_strict_ranges = []
 
 
@@ -67,12 +67,14 @@ func _parse_function_strict(lines: Array) -> void:
 			continue
 		var func_range := _find_function_range(lines, i)
 		if func_range.start > 0:
-			_function_strict_ranges.append({
-				"start": func_range.start,
-				"end": func_range.end,
-				"check_id": parsed.check_id,
-				"limit": parsed.limit
-			})
+			_function_strict_ranges.append(
+				{
+					"start": func_range.start,
+					"end": func_range.end,
+					"check_id": parsed.check_id,
+					"limit": parsed.limit,
+				}
+			)
 
 
 # Extract check_id and limit from a strict directive
@@ -80,23 +82,23 @@ func _parse_function_strict(lines: Array) -> void:
 func _extract_strict_directive(line: String, pattern: String) -> Dictionary:
 	var pos := line.find(pattern)
 	if pos < 0:
-		return {"check_id": "", "limit": -1}
+		return { "check_id": "", "limit": -1 }
 
 	var after := line.substr(pos + pattern.length())
 	if not after.begins_with(":"):
-		return {"check_id": "", "limit": -1}
+		return { "check_id": "", "limit": -1 }
 
 	var directive_str := after.substr(1).split(" ")[0].split("\t")[0].strip_edges()
 
 	var equals_pos := directive_str.find("=")
 	if equals_pos <= 0:
-		return {"check_id": "", "limit": -1}
+		return { "check_id": "", "limit": -1 }
 
 	var check_id := directive_str.substr(0, equals_pos)
 	var value_str := directive_str.substr(equals_pos + 1)
 	var limit := value_str.to_int() if value_str.is_valid_int() else -1
 
-	return {"check_id": check_id, "limit": limit}
+	return { "check_id": check_id, "limit": limit }
 
 
 # Find the range of a function starting after the given line index
@@ -109,21 +111,21 @@ func _find_function_range(lines: Array, start_idx: int) -> Dictionary:
 	for i in range(start_idx + 1, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
 		if GDLintDeclarationSyntax.declares(trimmed, "func"):
-			func_start = i + 1  # Convert to 1-based line number
+			func_start = i + 1 # Convert to 1-based line number
 			break
 
 	if func_start < 0:
-		return {"start": -1, "end": -1}
+		return { "start": -1, "end": -1 }
 
 	# Find where the function ends (next func or end of file)
 	for i in range(func_start, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
 		if GDLintDeclarationSyntax.declares(trimmed, "func"):
-			func_end = i  # Line before next func
+			func_end = i # Line before next func
 			break
 
 	# If no next function found, function extends to end of file
 	if func_end < 0:
 		func_end = lines.size()
 
-	return {"start": func_start, "end": func_end}
+	return { "start": func_start, "end": func_end }

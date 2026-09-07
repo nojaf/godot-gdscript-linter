@@ -47,49 +47,60 @@ func check_line(line: String, line_num: int) -> Array:
 
 	# Check class_name
 	if GDLintDeclarationSyntax.declares(trimmed, "class_name"):
-		var class_name_val := GDLintDeclarationSyntax.after_keyword(trimmed, "class_name").split(" ")[0].strip_edges()
+		var class_name_val := GDLintDeclarationSyntax.after_keyword(trimmed, "class_name").split(
+			" "
+		)[0].strip_edges()
 		if not is_pascal_case(class_name_val):
-			issues.append({
-				"line": line_num,
-				"severity": "warning",
-				"check_id": "naming-class",
-				"message": "Class name '%s' should be PascalCase" % class_name_val
-			})
+			issues.append(
+				{
+					"line": line_num,
+					"severity": "warning",
+					"check_id": "naming-class",
+					"message": "Class name '%s' should be PascalCase" % class_name_val,
+				}
+			)
 
 	# Check signal names
 	if GDLintDeclarationSyntax.declares(trimmed, "signal"):
 		var signal_name := GDLintDeclarationSyntax.after_keyword(trimmed, "signal").split("(")[0].strip_edges()
 		if not is_snake_case(signal_name):
-			issues.append({
-				"line": line_num,
-				"severity": "info",
-				"check_id": "naming-signal",
-				"message": "Signal '%s' should be snake_case" % signal_name
-			})
+			issues.append(
+				{
+					"line": line_num,
+					"severity": "info",
+					"check_id": "naming-signal",
+					"message": "Signal '%s' should be snake_case" % signal_name,
+				}
+			)
 
 	# Check const names
 	if GDLintDeclarationSyntax.declares(trimmed, "const"):
 		var after_const := GDLintDeclarationSyntax.after_keyword(trimmed, "const").strip_edges()
 		var const_name := after_const.split(":")[0].split("=")[0].strip_edges()
 		if not is_screaming_snake_case(const_name) and not is_pascal_case(const_name):
-			issues.append({
-				"line": line_num,
-				"severity": "info",
-				"check_id": "naming-const",
-				"message": "Constant '%s' should be SCREAMING_SNAKE_CASE or PascalCase" % const_name
-			})
+			issues.append(
+				{
+					"line": line_num,
+					"severity": "info",
+					"check_id": "naming-const",
+					"message": "Constant '%s' should be SCREAMING_SNAKE_CASE or PascalCase"
+					% const_name,
+				}
+			)
 
 	# Check enum names
 	if GDLintDeclarationSyntax.declares(trimmed, "enum"):
 		var after_enum := GDLintDeclarationSyntax.after_keyword(trimmed, "enum").strip_edges()
 		var enum_name := after_enum.split("{")[0].split(" ")[0].strip_edges()
 		if enum_name != "" and not is_pascal_case(enum_name):
-			issues.append({
-				"line": line_num,
-				"severity": "info",
-				"check_id": "naming-enum",
-				"message": "Enum '%s' should be PascalCase" % enum_name
-			})
+			issues.append(
+				{
+					"line": line_num,
+					"severity": "info",
+					"check_id": "naming-enum",
+					"message": "Enum '%s' should be PascalCase" % enum_name,
+				}
+			)
 
 	return issues
 
@@ -101,9 +112,24 @@ func check_function_naming(func_name: String, line_num: int) -> Variant:
 		return null
 
 	# Skip built-in overrides
-	var builtins := ["_init", "_ready", "_process", "_physics_process", "_enter_tree",
-		"_exit_tree", "_input", "_unhandled_input", "_gui_input", "_draw", "_notification",
-		"_get", "_set", "_get_property_list", "_to_string", "_get_configuration_warnings"]
+	var builtins := [
+		"_init",
+		"_ready",
+		"_process",
+		"_physics_process",
+		"_enter_tree",
+		"_exit_tree",
+		"_input",
+		"_unhandled_input",
+		"_gui_input",
+		"_draw",
+		"_notification",
+		"_get",
+		"_set",
+		"_get_property_list",
+		"_to_string",
+		"_get_configuration_warnings",
+	]
 	if func_name in builtins:
 		return null
 
@@ -114,7 +140,7 @@ func check_function_naming(func_name: String, line_num: int) -> Variant:
 				"line": line_num,
 				"severity": "info",
 				"check_id": "naming-function",
-				"message": "Private function '%s' should be _snake_case" % func_name
+				"message": "Private function '%s' should be _snake_case" % func_name,
 			}
 	else:
 		# Public functions should be snake_case
@@ -123,7 +149,7 @@ func check_function_naming(func_name: String, line_num: int) -> Variant:
 				"line": line_num,
 				"severity": "info",
 				"check_id": "naming-function",
-				"message": "Function '%s' should be snake_case" % func_name
+				"message": "Function '%s' should be snake_case" % func_name,
 			}
 
 	return null

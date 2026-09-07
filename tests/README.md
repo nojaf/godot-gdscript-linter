@@ -28,12 +28,17 @@ against, and the formatter is rebuilt from a sibling checkout every run.
 Nothing needs importing first. Fixtures run in a fresh copy under a temporary
 directory, and the repository is imported automatically if `.godot` is absent.
 
-## Two kinds of test
+## Three kinds of test
 
 **Unit** assertions live in `unit/run.gd` and run inside Godot, over the pure
 functions in `GDLintDeclarationSyntax`. That file is the one eight checkers
 depend on, and every regression in it has been silent: a declaration it fails to
 recognise is not reported as an error, it is simply never checked.
+
+**Formatting** runs `gdscript-formatter --check` over the repository. The
+style lives in `.editorconfig` at the root, which also excludes `fixtures/*/src`,
+because a fixture source is an input whose exact shape is the test. A failure
+lists the files and the command that fixes them.
 
 **Fixtures** are small Godot projects under `fixtures/`. Each has a `config`
 naming the flags to run, and its findings are held in a snapshot.

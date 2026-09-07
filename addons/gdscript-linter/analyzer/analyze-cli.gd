@@ -20,28 +20,32 @@ const CodeAnalyzerClass = preload("res://addons/gdscript-linter/analyzer/code-an
 const AnalysisResultClass = preload("res://addons/gdscript-linter/analyzer/analysis-result.gd")
 const FileResultClass = preload("res://addons/gdscript-linter/analyzer/file-result.gd")
 const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
-const HtmlReportGenerator = preload("res://addons/gdscript-linter/analyzer/html-report-generator.gd")
+const HtmlReportGenerator = preload(
+	"res://addons/gdscript-linter/analyzer/html-report-generator.gd"
+)
 
-var _target_paths: Array[String] = []  # Multiple paths to analyze
-var _output_format: String = "console"  # "console", "json", "clickable", "html", "github"
-var _output_file: String = ""  # For HTML output
-var _no_ignore: bool = false  # Bypass all gdlint:ignore directives
-var _check_members: bool = false  # Also load every script and verify self.foo.bar chains
-var _check_unused_functions: bool = false  # Also report functions nothing references
-var _check_exports: bool = false  # Also report @export object vars with no null guard
-var _check_node_paths: bool = false  # Also verify $Path and %Name against the scenes
-var _source_index: GDLintSourceIndex = null  # Structure, built once per run
-var _config_path: String = ""  # Custom config file path
-var _severity_filter: String = ""  # Minimum severity: "info", "warning", "critical"
-var _check_filter: Array[String] = []  # Specific checks to run
-var _top_limit: int = 0  # Limit to top N issues (0 = no limit)
-var _json_indent: String = "\t"  # Indent for json/sarif output ("--spaces N"; "" = compact)
+var _target_paths: Array[String] = [] # Multiple paths to analyze
+var _output_format: String = "console" # "console", "json", "clickable", "html", "github"
+var _output_file: String = "" # For HTML output
+var _no_ignore: bool = false # Bypass all gdlint:ignore directives
+var _check_members: bool = false # Also load every script and verify self.foo.bar chains
+var _check_unused_functions: bool = false # Also report functions nothing references
+var _check_exports: bool = false # Also report @export object vars with no null guard
+var _check_node_paths: bool = false # Also verify $Path and %Name against the scenes
+var _source_index: GDLintSourceIndex = null # Structure, built once per run
+var _config_path: String = "" # Custom config file path
+var _severity_filter: String = "" # Minimum severity: "info", "warning", "critical"
+var _check_filter: Array[String] = [] # Specific checks to run
+var _top_limit: int = 0 # Limit to top N issues (0 = no limit)
+var _json_indent: String = "\t" # Indent for json/sarif output ("--spaces N"; "" = compact)
 var _exit_code: int = 0
+
 
 func _init() -> void:
 	_parse_arguments()
 	_run_analysis()
 	quit(_exit_code)
+
 
 # gdlint:ignore-function:long-function - CLI argument parsing with many options
 func _parse_arguments() -> void:
@@ -129,22 +133,29 @@ func _parse_arguments() -> void:
 	if _target_paths.is_empty():
 		_target_paths.append("res://")
 
+
 # gdlint:ignore-function:print-statement,long-function - CLI help output
 func _print_help() -> void:
 	print("")
 	print("GDScript Linter - Code Quality Analyzer for GDScript")
 	print("")
 	print("Usage:")
-	print("  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- [options] [paths...]")
+	print(
+		"  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- [options] [paths...]"
+	)
 	print("")
 	print("Arguments:")
 	print("  [paths...]        Files or directories to analyze (default: res://)")
 	print("")
 	print("Options:")
 	print("  --config <path>   Path to config file (default: gdlint.json)")
-	print("  --format <type>   Output format: console, json, sarif, clickable, html, github (default: console)")
+	print(
+		"  --format <type>   Output format: console, json, sarif, clickable, html, github (default: console)"
+	)
 	print("  --severity <lvl>  Minimum severity to report: info, warning, critical")
-	print("  --check <checks>  Comma-separated list of checks to run (e.g., long-function,high-complexity)")
+	print(
+		"  --check <checks>  Comma-separated list of checks to run (e.g., long-function,high-complexity)"
+	)
 	print("  --top <N>         Show only top N issues sorted by priority")
 	print("  --spaces <N>      Indent width for json/sarif output (0 = compact; default: tab)")
 	print("  --json            Shorthand for --format json")
@@ -170,19 +181,24 @@ func _print_help() -> void:
 	print("  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd")
 	print("")
 	print("  # Analyze specific directories")
-	print("  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- src/ scripts/")
+	print(
+		"  godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -- src/ scripts/"
+	)
 	print("")
 	print("  # Use custom config and GitHub Actions output")
 	print("  godot --headless --script ... -- --config gdlint-ci.json --format github src/")
 	print("")
 	print("  # Show only critical issues for specific checks")
-	print("  godot --headless --script ... -- --severity critical --check high-complexity,long-function")
+	print(
+		"  godot --headless --script ... -- --severity critical --check high-complexity,long-function"
+	)
 	print("")
 	print("Exit codes:")
 	print("  0 = No issues (or only filtered-out issues)")
 	print("  1 = Warnings found")
 	print("  2 = Critical issues found")
 	print("")
+
 
 func _run_analysis() -> void:
 	var config := _load_config()
@@ -212,7 +228,7 @@ func _run_analysis() -> void:
 	if _check_members or _check_unused_functions or _check_exports or _check_node_paths:
 		_source_index = _build_source_index(merged_result)
 		if _source_index == null:
-			return  # _build_source_index already reported why
+			return # _build_source_index already reported why
 
 	if _check_members:
 		_run_member_check(merged_result, config)
@@ -394,10 +410,14 @@ func _apply_severity_filter(result) -> void:
 			min_severity = IssueClass.Severity.CRITICAL
 		"warning":
 			min_severity = IssueClass.Severity.WARNING
-		_:  # "info" or any other value
-			return  # No filtering needed
+		_: # "info" or any other value
+			return # No filtering needed
 
-	result.issues = result.issues.filter(func(issue): return issue.severity >= min_severity)
+	# A named Callable rather than an inline lambda: the formatter wraps a lambda
+	# argument with a trailing comma inside its body, which changes the code.
+	var at_least := func(issue) -> bool:
+		return issue.severity >= min_severity
+	result.issues = result.issues.filter(at_least)
 
 
 # Sort issues by priority and limit to top N
@@ -462,6 +482,7 @@ func _write_or_print(payload: String, label: String) -> void:
 	file.close()
 	print("%s written to: %s" % [label, _output_file])
 
+
 # gdlint:ignore-function:print-statement - CLI SARIF 2.1.0 output
 func _output_sarif(result) -> void:
 	# Static Analysis Results Interchange Format 2.1.0 (https://sarifweb.azurewebsites.net/)
@@ -469,50 +490,59 @@ func _output_sarif(result) -> void:
 	var sarif := {
 		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
 		"version": "2.1.0",
-		"runs": [{
-			"tool": {
-				"driver": {
-					"name": "GDScript Linter",
-					"version": _get_tool_version(),
-					"informationUri": "https://poplava.itch.io",
-					"rules": _sarif_rules(result),
-				}
-			},
-			"results": _sarif_results(result),
-		}],
+		"runs": [
+			{
+				"tool": {
+					"driver": {
+						"name": "GDScript Linter",
+						"version": _get_tool_version(),
+						"informationUri": "https://poplava.itch.io",
+						"rules": _sarif_rules(result),
+					}
+				},
+				"results": _sarif_results(result),
+			}
+		],
 	}
 	_write_or_print(JSON.stringify(sarif, _json_indent), "SARIF report")
 
+
 # Distinct rule ids seen in this run, as minimal reportingDescriptor entries.
 func _sarif_rules(result) -> Array:
-	var seen := {}
+	var seen := { }
 	var rules := []
 	for issue in result.issues:
 		if not seen.has(issue.check_id):
 			seen[issue.check_id] = true
-			rules.append({"id": issue.check_id})
+			rules.append({ "id": issue.check_id })
 	return rules
+
 
 func _sarif_results(result) -> Array:
 	var results := []
 	for issue in result.issues:
-		var region := {"startLine": issue.line}
+		var region := { "startLine": issue.line }
 		# SARIF columns are 1-based; our column is 0-based and usually 0 (unset).
 		# Omit when 0 so strict validators accept the file.
 		if issue.column > 0:
 			region["startColumn"] = issue.column + 1
-		results.append({
-			"ruleId": issue.check_id,
-			"level": _sarif_level(issue.severity),
-			"message": {"text": issue.message},
-			"locations": [{
-				"physicalLocation": {
-					"artifactLocation": {"uri": _sarif_uri(issue.file_path)},
-					"region": region,
-				}
-			}],
-		})
+		results.append(
+			{
+				"ruleId": issue.check_id,
+				"level": _sarif_level(issue.severity),
+				"message": { "text": issue.message },
+				"locations": [
+					{
+						"physicalLocation": {
+							"artifactLocation": { "uri": _sarif_uri(issue.file_path) },
+							"region": region,
+						}
+					}
+				],
+			}
+		)
 	return results
+
 
 func _sarif_level(severity: int) -> String:
 	match severity:
@@ -523,6 +553,7 @@ func _sarif_level(severity: int) -> String:
 		_:
 			return "note"
 
+
 # Repo-relative URI: strip res:// and normalize separators to forward slashes.
 func _sarif_uri(file_path: String) -> String:
 	var uri := file_path
@@ -530,20 +561,23 @@ func _sarif_uri(file_path: String) -> String:
 		uri = uri.substr(6)
 	return uri.replace("\\", "/")
 
+
 func _get_tool_version() -> String:
 	var cfg := ConfigFile.new()
 	if cfg.load("res://addons/gdscript-linter/plugin.cfg") == OK:
 		return str(cfg.get_value("plugin", "version", "unknown"))
 	return "unknown"
 
+
 # gdlint:ignore-function:print-statement,long-function - CLI clickable output
 func _output_clickable(result) -> void:
 	# Format that Godot Output panel makes clickable
 	print("")
 	print("=== Code Analysis Results ===")
-	print("Files: %d | Lines: %d | Issues: %d" % [
-		result.files_analyzed, result.total_lines, result.issues.size()
-	])
+	print(
+		"Files: %d | Lines: %d | Issues: %d"
+		% [result.files_analyzed, result.total_lines, result.issues.size()]
+	)
 	print("")
 
 	# Group by severity
@@ -594,13 +628,10 @@ func _output_github(result) -> void:
 			file_path = file_path.substr(6)
 
 		# Format: ::level file=path,line=N::message
-		print("::%s file=%s,line=%d::[%s] %s" % [
-			level,
-			file_path,
-			issue.line,
-			issue.check_id,
-			issue.message
-		])
+		print(
+			"::%s file=%s,line=%d::[%s] %s"
+			% [level, file_path, issue.line, issue.check_id, issue.message]
+		)
 
 
 # gdlint:ignore-function:print-statement - Console output formatting
@@ -614,15 +645,16 @@ func _output_console(result) -> void:
 	_print_todo_comments(result)
 	_print_console_footer()
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_console_header(result) -> void:
 	print("")
-	print("=" .repeat(60))
+	print("=".repeat(60))
 	print("GDSCRIPT LINTER - CODE QUALITY REPORT")
-	print("=" .repeat(60))
+	print("=".repeat(60))
 	print("")
 	print("SUMMARY")
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	print("Total files analyzed: %d" % result.files_analyzed)
 	print("Total lines of code: %d" % result.total_lines)
 	print("Critical issues: %d" % result.get_critical_count())
@@ -632,23 +664,31 @@ func _print_console_header(result) -> void:
 	print("Analysis time: %dms" % result.analysis_time_ms)
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_top_files_by_size(result) -> void:
 	print("TOP 10 FILES BY SIZE")
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	var by_size: Array = result.file_results.duplicate()
-	by_size.sort_custom(func(a, b): return a.line_count > b.line_count)
+	by_size.sort_custom(
+		func(a, b):
+			return a.line_count > b.line_count,
+	)
 	for i in range(mini(10, by_size.size())):
 		var f = by_size[i]
 		print("%4d lines | %s" % [f.line_count, f.file_path])
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_top_files_by_debt(result) -> void:
 	print("TOP 10 FILES BY DEBT SCORE")
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	var by_debt: Array = result.file_results.duplicate()
-	by_debt.sort_custom(func(a, b): return a.debt_score > b.debt_score)
+	by_debt.sort_custom(
+		func(a, b):
+			return a.debt_score > b.debt_score,
+	)
 	for i in range(mini(10, by_debt.size())):
 		var f = by_debt[i]
 		if f.debt_score == 0:
@@ -656,35 +696,50 @@ func _print_top_files_by_debt(result) -> void:
 		print("Score %3d | %4d lines | %s" % [f.debt_score, f.line_count, f.file_path])
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_critical_issues(result) -> void:
 	var critical: Array = result.get_issues_by_severity(IssueClass.Severity.CRITICAL)
 	if critical.size() == 0:
 		return
 	print("CRITICAL ISSUES (Fix Immediately)")
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	for issue in critical:
 		print("  %s" % issue.get_clickable_format())
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_long_functions(result) -> void:
 	print("LONG FUNCTIONS")
-	print("-" .repeat(40))
-	var long_func_issues: Array = result.issues.filter(func(i): return i.check_id == "long-function")
-	long_func_issues.sort_custom(func(a, b): return a.severity > b.severity)
+	print("-".repeat(40))
+	var long_func_issues: Array = result.issues.filter(
+		func(i):
+			return i.check_id == "long-function",
+	)
+	long_func_issues.sort_custom(
+		func(a, b):
+			return a.severity > b.severity,
+	)
 	for i in range(mini(15, long_func_issues.size())):
 		var issue = long_func_issues[i]
 		print("  %s" % issue.get_clickable_format())
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_pinned_exception_issues(result) -> void:
-	var pinned_issues: Array = result.issues.filter(func(i): return i.check_id.ends_with("-exceeded") or i.check_id.ends_with("-improved") or i.check_id.ends_with("-unnecessary"))
+	# Named rather than inline for the same reason as in _apply_severity_filter.
+	var is_pinned := func(i) -> bool:
+		var id: String = i.check_id
+		return (
+			id.ends_with("-exceeded") or id.ends_with("-improved") or id.ends_with("-unnecessary")
+		)
+	var pinned_issues: Array = result.issues.filter(is_pinned)
 	if pinned_issues.size() == 0:
 		return
 	print("PINNED EXCEPTION ALERTS")
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	for issue in pinned_issues:
 		print("  %s" % issue.get_clickable_format())
 	print("")
@@ -692,11 +747,14 @@ func _print_pinned_exception_issues(result) -> void:
 
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_todo_comments(result) -> void:
-	var todo_issues: Array = result.issues.filter(func(i): return i.check_id == "todo-comment")
+	var todo_issues: Array = result.issues.filter(
+		func(i):
+			return i.check_id == "todo-comment",
+	)
 	if todo_issues.size() == 0:
 		return
 	print("TODO/FIXME COMMENTS (%d total)" % todo_issues.size())
-	print("-" .repeat(40))
+	print("-".repeat(40))
 	for i in range(mini(10, todo_issues.size())):
 		var issue = todo_issues[i]
 		print("  %s" % issue.get_clickable_format())
@@ -704,12 +762,13 @@ func _print_todo_comments(result) -> void:
 		print("  ... and %d more" % (todo_issues.size() - 10))
 	print("")
 
+
 # gdlint:ignore-function:print-statement - CLI console output
 func _print_console_footer() -> void:
-	print("=" .repeat(60))
+	print("=".repeat(60))
 	print("Run with --clickable for Godot Output panel clickable links")
 	print("Run with --json for machine-readable output")
-	print("=" .repeat(60))
+	print("=".repeat(60))
 
 
 # gdlint:ignore-function:print-statement - CLI HTML output

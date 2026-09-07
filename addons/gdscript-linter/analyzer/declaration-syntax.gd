@@ -53,7 +53,7 @@ static func declaration_at(lines: Array, index: int) -> Dictionary:
 		text += " " + next
 		depth += _paren_depth(next)
 		span += 1
-	return {"text": text, "span": span}
+	return { "text": text, "span": span }
 
 
 # Net change in parenthesis depth, skipping quoted text and trailing comments.
@@ -65,13 +65,13 @@ static func _paren_depth(text: String) -> int:
 		var character := text[i]
 		if not quote.is_empty():
 			if character == "\\":
-				i += 1  # an escaped character cannot close the string
+				i += 1 # an escaped character cannot close the string
 			elif character == quote:
 				quote = ""
 		elif character == "\"" or character == "'":
 			quote = character
 		elif character == "#":
-			break  # a comment runs to the end of the line
+			break # a comment runs to the end of the line
 		elif character == "(":
 			depth += 1
 		elif character == ")":
@@ -123,7 +123,7 @@ static func declares_abstract(trimmed: String) -> bool:
 # Steps over one annotation, including a parenthesised argument list that may
 # itself contain strings with parentheses in them.
 static func _skip_annotation(text: String) -> String:
-	var i := 1  # past the '@'
+	var i := 1 # past the '@'
 	while i < text.length() and (text[i] == "_" or text[i].is_valid_identifier()):
 		i += 1
 

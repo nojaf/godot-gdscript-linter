@@ -130,7 +130,7 @@ func _update_styles() -> void:
 		body_style.bg_color = GDLintThemeColors.get_color("panel_bg")
 		body_style.border_color = GDLintThemeColors.get_color("border")
 		body_style.set_border_width_all(1)
-		body_style.border_width_top = 0  # No top border (header has bottom)
+		body_style.border_width_top = 0 # No top border (header has bottom)
 		body_style.corner_radius_top_left = 0
 		body_style.corner_radius_top_right = 0
 		body_style.corner_radius_bottom_left = 6
@@ -146,7 +146,7 @@ func _load_collapsed_state() -> void:
 	if editor_settings.has_setting(setting_key):
 		collapsed = editor_settings.get_setting(setting_key)
 	else:
-		collapsed = true  # Default to collapsed
+		collapsed = true # Default to collapsed
 
 
 func _save_collapsed_state() -> void:

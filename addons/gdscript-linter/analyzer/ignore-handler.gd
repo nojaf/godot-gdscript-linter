@@ -15,11 +15,11 @@ const IGNORE_FILE_PATTERN := "gdlint:ignore-file"
 const IGNORE_BELOW_PATTERN := "gdlint:ignore-below"
 
 var _lines: Array = []
-var _ignored_ranges: Array = []  # Array of {start: int, end: int, check_id: String, pinned_values: Dictionary}
-var _file_ignore_checks: Array = []  # Array of check IDs to ignore for entire file (empty string = all)
-var _file_pinned_values: Dictionary = {}  # check_id -> pinned value for file-level ignores
-var _ignore_below: Array = []  # Array of {line: int, checks: Array, pinned_values: Dictionary} - ignore from line to EOF
-var _inline_pinned_values: Dictionary = {}  # line_num -> {check_id -> pinned_value} for inline ignores
+var _ignored_ranges: Array = [] # Array of {start: int, end: int, check_id: String, pinned_values: Dictionary}
+var _file_ignore_checks: Array = [] # Array of check IDs to ignore for entire file (empty string = all)
+var _file_pinned_values: Dictionary = { } # check_id -> pinned value for file-level ignores
+var _ignore_below: Array = [] # Array of {line: int, checks: Array, pinned_values: Dictionary} - ignore from line to EOF
+var _inline_pinned_values: Dictionary = { } # line_num -> {check_id -> pinned_value} for inline ignores
 
 
 func initialize(lines: Array) -> void:
@@ -33,9 +33,9 @@ func clear() -> void:
 	_lines = []
 	_ignored_ranges = []
 	_file_ignore_checks = []
-	_file_pinned_values = {}
+	_file_pinned_values = { }
 	_ignore_below = []
-	_inline_pinned_values = {}
+	_inline_pinned_values = { }
 
 
 # Check if an issue should be ignored based on inline comments or ignored ranges
@@ -76,7 +76,7 @@ func should_ignore(line_num: int, check_id: String) -> bool:
 # Returns: {action: String, pinned: int, actual: int, limit: int}
 # Actions: "ignore", "exceeded", "improved", "unnecessary", "normal"
 func check_with_pin(line_num: int, check_id: String, actual_value: int, limit: int) -> Dictionary:
-	var result := {"action": "normal", "pinned": -1, "actual": actual_value, "limit": limit}
+	var result := { "action": "normal", "pinned": -1, "actual": actual_value, "limit": limit }
 
 	# Check file-level ignores first
 	if _is_file_ignored(check_id):
@@ -115,7 +115,7 @@ func check_with_pin(line_num: int, check_id: String, actual_value: int, limit: i
 
 # Evaluate pinned value against actual and limit, return appropriate action
 func _evaluate_pinned_result(pinned: int, actual: int, limit: int) -> Dictionary:
-	var result := {"action": "ignore", "pinned": pinned, "actual": actual, "limit": limit}
+	var result := { "action": "ignore", "pinned": pinned, "actual": actual, "limit": limit }
 
 	if pinned < 0:
 		# No pin, just ignore
@@ -131,7 +131,6 @@ func _evaluate_pinned_result(pinned: int, actual: int, limit: int) -> Dictionary
 		# Value improved but still over limit - consider tightening
 		result.action = "improved"
 	# else actual == pinned: keep as "ignore"
-
 	return result
 
 
@@ -142,7 +141,7 @@ func _get_below_pinned_value(line_num: int, check_id: String):
 			for ignored_check in ignore_entry.checks:
 				if ignored_check == "" or ignored_check == check_id:
 					return ignore_entry.pinned_values.get(check_id, -1)
-	return null  # Not ignored by below directive
+	return null # Not ignored by below directive
 
 
 # Get pinned value from ignored range if applicable
@@ -154,7 +153,7 @@ func _get_range_pinned_value(line_num: int, check_id: String):
 			for specific_check in ignored_range.check_id.split(","):
 				if specific_check.strip_edges() == check_id:
 					return ignored_range.pinned_values.get(check_id, -1)
-	return null  # Not in ignored range
+	return null # Not in ignored range
 
 
 # Get pinned value from inline ignore directive
@@ -185,7 +184,7 @@ func _get_next_line_pinned_value(line: String, check_id: String):
 func _is_file_ignored(check_id: String) -> bool:
 	for ignored_check in _file_ignore_checks:
 		if ignored_check == "":
-			return true  # Empty string means ignore all
+			return true # Empty string means ignore all
 		if ignored_check == check_id:
 			return true
 	return false
@@ -198,7 +197,7 @@ func _is_below_ignored(line_num: int, check_id: String) -> bool:
 			# Check if this check_id is in the ignored list
 			for ignored_check in ignore_entry.checks:
 				if ignored_check == "":
-					return true  # Empty string means ignore all
+					return true # Empty string means ignore all
 				if ignored_check == check_id:
 					return true
 	return false
@@ -208,7 +207,7 @@ func _is_below_ignored(line_num: int, check_id: String) -> bool:
 # Looks for # gdlint:ignore-file or # gdlint:ignore-file:check-id or # gdlint:ignore-file:check-id=value
 func _parse_file_ignores(lines: Array) -> Array:
 	var checks: Array = []
-	_file_pinned_values = {}
+	_file_pinned_values = { }
 
 	# Only check first 10 lines for file-level ignores (typically at top of file)
 	var max_lines := mini(10, lines.size())
@@ -217,7 +216,7 @@ func _parse_file_ignores(lines: Array) -> Array:
 		if IGNORE_FILE_PATTERN in line:
 			var result := _extract_check_id_with_pin(line, IGNORE_FILE_PATTERN)
 			if result.check_id == "":
-				checks.append("")  # Ignore all checks
+				checks.append("") # Ignore all checks
 			else:
 				# Support comma-separated check IDs (pins only work for single check)
 				for specific_check in result.check_id.split(","):
@@ -239,9 +238,9 @@ func _parse_ignore_below(lines: Array) -> Array:
 		if IGNORE_BELOW_PATTERN in line:
 			var extracted := _extract_check_id_with_pin(line, IGNORE_BELOW_PATTERN)
 			var checks: Array = []
-			var pinned_values: Dictionary = {}
+			var pinned_values: Dictionary = { }
 			if extracted.check_id == "":
-				checks.append("")  # Ignore all checks
+				checks.append("") # Ignore all checks
 			else:
 				# Support comma-separated check IDs (pins only work for single check)
 				for specific_check in extracted.check_id.split(","):
@@ -249,7 +248,7 @@ func _parse_ignore_below(lines: Array) -> Array:
 					checks.append(clean_check)
 					if extracted.pinned_value > 0:
 						pinned_values[clean_check] = extracted.pinned_value
-			result.append({"line": i + 1, "checks": checks, "pinned_values": pinned_values})
+			result.append({ "line": i + 1, "checks": checks, "pinned_values": pinned_values })
 
 	return result
 
@@ -312,7 +311,7 @@ func _parse_ignored_ranges(lines: Array) -> Array:
 	var ranges: Array = []
 
 	# Track block starts for matching with ends
-	var block_starts: Array = []  # Array of {line: int, check_id: String, pinned_values: Dictionary}
+	var block_starts: Array = [] # Array of {line: int, check_id: String, pinned_values: Dictionary}
 
 	for i in range(lines.size()):
 		var line: String = lines[i]
@@ -323,34 +322,40 @@ func _parse_ignored_ranges(lines: Array) -> Array:
 			var extracted := _extract_check_id_with_pin(line, IGNORE_FUNCTION_PATTERN)
 			var func_range := _find_function_range(lines, i)
 			if func_range.start > 0:
-				var pinned_values: Dictionary = {}
+				var pinned_values: Dictionary = { }
 				if extracted.pinned_value > 0:
 					pinned_values[extracted.check_id] = extracted.pinned_value
-				ranges.append({
-					"start": func_range.start,
-					"end": func_range.end,
-					"check_id": extracted.check_id,
-					"pinned_values": pinned_values
-				})
+				ranges.append(
+					{
+						"start": func_range.start,
+						"end": func_range.end,
+						"check_id": extracted.check_id,
+						"pinned_values": pinned_values,
+					}
+				)
 
 		# Check for ignore-block-start directive
 		if IGNORE_BLOCK_START_PATTERN in line:
 			var extracted := _extract_check_id_with_pin(line, IGNORE_BLOCK_START_PATTERN)
-			var pinned_values: Dictionary = {}
+			var pinned_values: Dictionary = { }
 			if extracted.pinned_value > 0:
 				pinned_values[extracted.check_id] = extracted.pinned_value
-			block_starts.append({"line": line_num, "check_id": extracted.check_id, "pinned_values": pinned_values})
+			block_starts.append(
+				{ "line": line_num, "check_id": extracted.check_id, "pinned_values": pinned_values }
+			)
 
 		# Check for ignore-block-end directive
 		if IGNORE_BLOCK_END_PATTERN in line:
 			if block_starts.size() > 0:
 				var block_start = block_starts.pop_back()
-				ranges.append({
-					"start": block_start.line,
-					"end": line_num,
-					"check_id": block_start.check_id,
-					"pinned_values": block_start.pinned_values
-				})
+				ranges.append(
+					{
+						"start": block_start.line,
+						"end": line_num,
+						"check_id": block_start.check_id,
+						"pinned_values": block_start.pinned_values,
+					}
+				)
 
 	return ranges
 
@@ -367,11 +372,11 @@ func _extract_check_id(line: String, pattern: String) -> String:
 func _extract_check_id_with_pin(line: String, pattern: String) -> Dictionary:
 	var pos := line.find(pattern)
 	if pos < 0:
-		return {"check_id": "", "pinned_value": -1}
+		return { "check_id": "", "pinned_value": -1 }
 
 	var after := line.substr(pos + pattern.length())
 	if not after.begins_with(":"):
-		return {"check_id": "", "pinned_value": -1}
+		return { "check_id": "", "pinned_value": -1 }
 
 	var check_str := after.substr(1).split(" ")[0].split("\t")[0].strip_edges()
 
@@ -381,9 +386,9 @@ func _extract_check_id_with_pin(line: String, pattern: String) -> Dictionary:
 		var check_id := check_str.substr(0, equals_pos)
 		var value_str := check_str.substr(equals_pos + 1)
 		var pinned_value := value_str.to_int() if value_str.is_valid_int() else -1
-		return {"check_id": check_id, "pinned_value": pinned_value}
+		return { "check_id": check_id, "pinned_value": pinned_value }
 
-	return {"check_id": check_str, "pinned_value": -1}
+	return { "check_id": check_str, "pinned_value": -1 }
 
 
 # Find the range of a function starting after the given line index
@@ -395,21 +400,21 @@ func _find_function_range(lines: Array, start_idx: int) -> Dictionary:
 	for i in range(start_idx + 1, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
 		if GDLintDeclarationSyntax.declares(trimmed, "func"):
-			func_start = i + 1  # Convert to 1-based line number
+			func_start = i + 1 # Convert to 1-based line number
 			break
 
 	if func_start < 0:
-		return {"start": -1, "end": -1}
+		return { "start": -1, "end": -1 }
 
 	# Find where the function ends (next func or end of file)
 	for i in range(func_start, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
 		if GDLintDeclarationSyntax.declares(trimmed, "func"):
-			func_end = i  # Line before next func (0-based, so already correct as 1-based end)
+			func_end = i # Line before next func (0-based, so already correct as 1-based end)
 			break
 
 	# If no next function found, function extends to end of file
 	if func_end < 0:
 		func_end = lines.size()
 
-	return {"start": func_start, "end": func_end}
+	return { "start": func_start, "end": func_end }

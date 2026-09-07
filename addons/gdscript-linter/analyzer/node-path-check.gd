@@ -38,7 +38,7 @@ var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 var _scenes := GDLintSceneIndex.new()
 ## res:// script path -> the paths of itself and every base script, nearest first.
-var _ancestry := {}
+var _ancestry := { }
 
 
 ## Run over the given res:// script paths, returning an Array of Issue.
@@ -84,10 +84,16 @@ func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 		if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNKNOWN_NODE_PATH):
 			continue
 
-		issues.append(IssueClass.create(
-			path, line, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_NODE_PATH,
-			"'%s' does not exist in %s%s" % [
-				lookup["written"], _where(missing), _hint(lookup, missing[0])]))
+		issues.append(
+			IssueClass.create(
+				path,
+				line,
+				IssueClass.Severity.CRITICAL,
+				CHECK_UNKNOWN_NODE_PATH,
+				"'%s' does not exist in %s%s"
+				% [lookup["written"], _where(missing), _hint(lookup, missing[0])],
+			)
+		)
 
 	if _respect_ignores:
 		_ignore_handler.clear()
@@ -103,15 +109,17 @@ func _lookups(entry: Dictionary) -> Array:
 		if written_path.is_empty():
 			continue
 		var unique := bool(record.get("unique", false))
-		lookups.append({
-			"path": "%" + written_path if unique else written_path,
-			"unique": unique,
-			"written": _sigil_form(written_path, unique),
-			"line": GDLintSourceIndex.line_of(record),
-		})
+		lookups.append(
+			{
+				"path": "%" + written_path if unique else written_path,
+				"unique": unique,
+				"written": _sigil_form(written_path, unique),
+				"line": GDLintSourceIndex.line_of(record),
+			}
+		)
 
 	for literal: Dictionary in entry.string_literals:
-		var argument_of: Dictionary = literal.get("argument_of", {})
+		var argument_of: Dictionary = literal.get("argument_of", { })
 		if int(argument_of.get("index", -1)) != 0:
 			continue
 		var callee := String(argument_of.get("callee", ""))
@@ -120,12 +128,14 @@ func _lookups(entry: Dictionary) -> Array:
 		var value := String(literal.get("value", ""))
 		if value.is_empty():
 			continue
-		lookups.append({
-			"path": value,
-			"unique": value.begins_with("%"),
-			"written": "%s(\"%s\")" % [callee, value],
-			"line": GDLintSourceIndex.line_of(literal),
-		})
+		lookups.append(
+			{
+				"path": value,
+				"unique": value.begins_with("%"),
+				"written": "%s(\"%s\")" % [callee, value],
+				"line": GDLintSourceIndex.line_of(literal),
+			}
+		)
 	return lookups
 
 
@@ -179,7 +189,7 @@ func _ancestry_of(script_path: String) -> Array:
 # "dev/lab.tscn (attached at the root)", grouped so that two scenes attaching
 # the script at the same node read as one clause.
 func _where(missing: Array) -> String:
-	var scenes_by_node := {}
+	var scenes_by_node := { }
 	var order: Array = []
 	for attachment: Dictionary in missing:
 		var node := String(attachment["node"])
@@ -219,7 +229,10 @@ func _hint(lookup: Dictionary, attachment: Dictionary) -> String:
 		return ""
 
 	if bool(lookup["unique"]):
-		return "; '%s' is at %s but not marked unique_name_in_owner" % [name, " and ".join(candidates)]
+		return "; '%s' is at %s but not marked unique_name_in_owner" % [
+			name,
+			" and ".join(candidates),
+		]
 	if candidates.size() == 1:
 		return "; the only '%s' is at %s" % [name, candidates[0]]
 	return "; '%s' exists at %s" % [name, ", ".join(candidates.slice(0, NAMED_SCENES_LIMIT))]

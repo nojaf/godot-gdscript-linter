@@ -1,4 +1,6 @@
 extends SceneTree
+
+
 ## Writes the scenes the node-path check resolves against, so Godot serialises
 ## them rather than anyone hand-authoring the format.
 ##

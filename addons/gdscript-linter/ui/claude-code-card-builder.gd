@@ -16,7 +16,10 @@ func _init(reset_icon: Texture2D) -> void:
 
 # Create Claude Code settings collapsible card
 func create_card(controls: Dictionary) -> GDLintCollapsibleCard:
-	var card := GDLintCollapsibleCard.new("Claude Code Integration", "code_quality/ui/claude_collapsed")
+	var card := GDLintCollapsibleCard.new(
+		"Claude Code Integration",
+		"code_quality/ui/claude_collapsed",
+	)
 	var vbox := card.get_content_container()
 
 	_add_enable_section(vbox, controls)
@@ -80,7 +83,10 @@ func _add_command_section(parent: VBoxContainer, controls: Dictionary) -> void:
 	controls.claude_command_edit.placeholder_text = DEFAULT_COMMAND
 	controls.claude_command_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	controls.claude_command_edit.add_theme_stylebox_override("normal", GDLintThemeColors.create_input_style())
+	controls.claude_command_edit.add_theme_stylebox_override(
+		"normal",
+		GDLintThemeColors.create_input_style(),
+	)
 
 	cmd_hbox.add_child(controls.claude_command_edit)
 

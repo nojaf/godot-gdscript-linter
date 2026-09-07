@@ -40,14 +40,27 @@ func _declaration_syntax() -> void:
 	_check(syntax.declares("static func modified() -> void:", "func"), true, "static func")
 	_check(syntax.declares("@abstract func may_target() -> bool", "func"), true, "@abstract func")
 	_check(syntax.declares("@rpc(\"any_peer\") func net() -> void:", "func"), true, "@rpc func")
-	_check(syntax.declares("@warning_ignore(\"x\") static func both() -> void:", "func"), true,
-		"annotation and modifier")
+	_check(
+		syntax.declares("@warning_ignore(\"x\") static func both() -> void:", "func"),
+		true,
+		"annotation and modifier",
+	)
 	_check(syntax.declares("@export var speed: int = 5", "var"), true, "@export var")
-	_check(syntax.declares("@export_range(0, 10) var ranged := 5", "var"), true, "@export_range var")
-	_check(syntax.declares("@warning_ignore(\"unused_signal\") signal done", "signal"), true,
-		"annotated signal")
-	_check(syntax.declares("@icon(\"res://i.svg\") class_name Foo extends Node", "class_name"), true,
-		"annotated class_name")
+	_check(
+		syntax.declares("@export_range(0, 10) var ranged := 5", "var"),
+		true,
+		"@export_range var",
+	)
+	_check(
+		syntax.declares("@warning_ignore(\"unused_signal\") signal done", "signal"),
+		true,
+		"annotated signal",
+	)
+	_check(
+		syntax.declares("@icon(\"res://i.svg\") class_name Foo extends Node", "class_name"),
+		true,
+		"annotated class_name",
+	)
 	_check(syntax.declares("static var shared := 1", "var"), true, "static var")
 
 	# Things that only look like declarations.
@@ -59,22 +72,40 @@ func _declaration_syntax() -> void:
 	# Taken off the raw line, the first parenthesis can belong to an annotation:
 	# that is how `@rpc("any_peer") func f(a, b)` came to report one parameter,
 	# and how a parameter named `""` came to exist.
-	_check(syntax.after_keyword("@rpc(\"any_peer\") func net(a: int, b: int) -> void:", "func"),
-		"net(a: int, b: int) -> void:", "after_keyword past an annotation")
-	_check(syntax.after_keyword("static func modified(a: int) -> void:", "func"),
-		"modified(a: int) -> void:", "after_keyword past a modifier")
-	_check(syntax.after_keyword("func plain() -> void:", "func"), "plain() -> void:",
-		"after_keyword with no prefix")
+	_check(
+		syntax.after_keyword("@rpc(\"any_peer\") func net(a: int, b: int) -> void:", "func"),
+		"net(a: int, b: int) -> void:",
+		"after_keyword past an annotation",
+	)
+	_check(
+		syntax.after_keyword("static func modified(a: int) -> void:", "func"),
+		"modified(a: int) -> void:",
+		"after_keyword past a modifier",
+	)
+	_check(
+		syntax.after_keyword("func plain() -> void:", "func"),
+		"plain() -> void:",
+		"after_keyword with no prefix",
+	)
 	_check(syntax.after_keyword("var x := 1", "func"), "", "after_keyword on the wrong keyword")
 
 	# An annotation argument can contain anything, including the keyword itself
 	# and unbalanced-looking text inside strings.
-	_check(syntax.strip_prefixes("@export_file(\"res://a.tscn\") var path := \"\""),
-		"var path := \"\"", "annotation argument holding a res:// path")
-	_check(syntax.strip_prefixes("@warning_ignore(\"unused\", \"shadowed\") func f():"),
-		"func f():", "annotation with several arguments")
-	_check(syntax.strip_prefixes("@onready var label: Label = $Label"),
-		"var label: Label = $Label", "@onready")
+	_check(
+		syntax.strip_prefixes("@export_file(\"res://a.tscn\") var path := \"\""),
+		"var path := \"\"",
+		"annotation argument holding a res:// path",
+	)
+	_check(
+		syntax.strip_prefixes("@warning_ignore(\"unused\", \"shadowed\") func f():"),
+		"func f():",
+		"annotation with several arguments",
+	)
+	_check(
+		syntax.strip_prefixes("@onready var label: Label = $Label"),
+		"var label: Label = $Label",
+		"@onready",
+	)
 	_check(syntax.strip_prefixes("func f():"), "func f():", "nothing to strip")
 
 	_check(syntax.declares_abstract("@abstract func may_target() -> bool"), true, "abstract")
@@ -90,18 +121,18 @@ func _wrapped_declarations() -> void:
 	_check(syntax.declaration_at(flat, 0).span, 1, "flat span")
 
 	# Wrapped: the `->` is on the closing line and the parameters are in between.
-	var wrapped := [
-		"func move(",
-		"\ttarget: Vector2,",
-		"\tspeed: float",
-		") -> void:",
-		"\tpass",
-	]
-	_check(syntax.declaration_at(wrapped, 0).text,
-		"func move( target: Vector2, speed: float ) -> void:", "wrapped text")
+	var wrapped := ["func move(", "\ttarget: Vector2,", "\tspeed: float", ") -> void:", "\tpass"]
+	_check(
+		syntax.declaration_at(wrapped, 0).text,
+		"func move( target: Vector2, speed: float ) -> void:",
+		"wrapped text",
+	)
 	_check(syntax.declaration_at(wrapped, 0).span, 4, "wrapped span")
-	_check(syntax.after_keyword(syntax.declaration_at(wrapped, 0).text, "func"),
-		"move( target: Vector2, speed: float ) -> void:", "wrapped, prefixes stripped")
+	_check(
+		syntax.after_keyword(syntax.declaration_at(wrapped, 0).text, "func"),
+		"move( target: Vector2, speed: float ) -> void:",
+		"wrapped, prefixes stripped",
+	)
 
 	# A parenthesis inside a string does not hold the scan open. Reading this one
 	# line at a time, `(unset)` opens a group that the next line never closes.
@@ -124,34 +155,57 @@ func _wrapped_declarations() -> void:
 	var broken := ["func oops("]
 	for i in range(60):
 		broken.append("\ta: int,")
-	_check(syntax.declaration_at(broken, 0).span <= GDLintDeclarationSyntax.MAX_WRAPPED_LINES,
-		true, "unbalanced source is bounded")
+	_check(
+		syntax.declaration_at(broken, 0).span <= GDLintDeclarationSyntax.MAX_WRAPPED_LINES,
+		true,
+		"unbalanced source is bounded",
+	)
 
 
 func _code_only() -> void:
 	var visible := GDLintStyleChecker.without_strings
 	var strip := GDLintStyleChecker.code_only
-	var blank := func(n: int) -> String: return " ".repeat(n)
+	var blank := func(n: int) -> String:
+		return " ".repeat(n)
 
 	# The quotes stay and the contents are blanked one character for one, so a
 	# column in the result is the same column in the source.
 	_check(visible.call("x = \"abc\""), "x = \"" + blank.call(3) + "\"", "string contents blanked")
-	_check(visible.call("return \"%6.2f  %s\" % [seconds, line]"),
-		"return \"" + blank.call(9) + "\" % [seconds, line]", "format specifier is not code")
-	_check(visible.call("print(\'single\')"), "print(\'" + blank.call(6) + "\')", "single quotes too")
+	_check(
+		visible.call("return \"%6.2f  %s\" % [seconds, line]"),
+		"return \"" + blank.call(9) + "\" % [seconds, line]",
+		"format specifier is not code",
+	)
+	_check(
+		visible.call("print(\'single\')"),
+		"print(\'" + blank.call(6) + "\')",
+		"single quotes too",
+	)
 	_check(visible.call("var n = 42"), "var n = 42", "plain code is untouched")
 
 	# `he said \"pay 500\" ok` is 22 characters once the escapes are counted as two.
-	_check(visible.call("print(\"he said \\\"pay 500\\\" ok\")"),
-		"print(\"" + blank.call(22) + "\")", "an escaped quote does not end the string")
+	_check(
+		visible.call("print(\"he said \\\"pay 500\\\" ok\")"),
+		"print(\"" + blank.call(22) + "\")",
+		"an escaped quote does not end the string",
+	)
 
 	# without_strings keeps the comment, because a check looking for
 	# commented-out code needs it. code_only drops it, because a digit in prose
 	# is not a magic number.
-	_check(visible.call("var kept := 1  #var removed := 2"), "var kept := 1  #var removed := 2",
-		"the comment survives without_strings")
+	_check(
+		visible.call("var kept := 1  #var removed := 2"),
+		"var kept := 1  #var removed := 2",
+		"the comment survives without_strings",
+	)
 	_check(strip.call("var x = 7  # was 250"), "var x = 7  ", "code_only drops the comment")
-	_check(strip.call("var url = \"res://a#b\"  # note"),
-		"var url = \"" + blank.call(9) + "\"  ", "a hash inside a string is not a comment")
-	_check(strip.call("print(\"#var x\")"), "print(\"" + blank.call(6) + "\")",
-		"nor does a hash in a string start one for code_only")
+	_check(
+		strip.call("var url = \"res://a#b\"  # note"),
+		"var url = \"" + blank.call(9) + "\"  ",
+		"a hash inside a string is not a comment",
+	)
+	_check(
+		strip.call("print(\"#var x\")"),
+		"print(\"" + blank.call(6) + "\")",
+		"nor does a hash in a string start one for code_only",
+	)

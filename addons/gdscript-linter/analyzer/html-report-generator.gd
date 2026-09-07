@@ -28,7 +28,7 @@ const ISSUE_TYPES := {
 	"naming-const": "Naming: Constant",
 	"naming-enum": "Naming: Enum",
 	"unused-variable": "Unused Variable",
-	"unused-parameter": "Unused Parameter"
+	"unused-parameter": "Unused Parameter",
 }
 
 
@@ -42,12 +42,15 @@ static func generate(result, issues: Array = [], context: String = "") -> String
 	var info: Array = []
 	for issue in all_issues:
 		match issue.severity:
-			IssueClass.Severity.CRITICAL: critical.append(issue)
-			IssueClass.Severity.WARNING: warnings.append(issue)
-			IssueClass.Severity.INFO: info.append(issue)
+			IssueClass.Severity.CRITICAL:
+				critical.append(issue)
+			IssueClass.Severity.WARNING:
+				warnings.append(issue)
+			IssueClass.Severity.INFO:
+				info.append(issue)
 
 	# Collect types by severity for linked filtering
-	var types_by_severity: Dictionary = {"all": {}, "critical": {}, "warning": {}, "info": {}}
+	var types_by_severity: Dictionary = { "all": { }, "critical": { }, "warning": { }, "info": { } }
 	for issue in all_issues:
 		types_by_severity["all"][issue.check_id] = true
 	for issue in critical:
@@ -107,7 +110,12 @@ static func generate(result, issues: Array = [], context: String = "") -> String
 	return html
 
 
-static func _get_html_header(result, critical_count: int, warning_count: int, info_count: int) -> String:
+static func _get_html_header(
+	result,
+	critical_count: int,
+	warning_count: int,
+	info_count: int,
+) -> String:
 	return """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -189,10 +197,21 @@ h2 { color: #888; font-size: 1.2em; margin: 20px 0 10px; border-bottom: 1px soli
 </div>
 
 <div id="issuesContainer">
-""" % [result.files_analyzed, result.total_lines, critical_count, warning_count, info_count, result.get_total_debt_score()]
+""" % [
+		result.files_analyzed,
+		result.total_lines,
+		critical_count,
+		warning_count,
+		info_count,
+		result.get_total_debt_score(),
+	]
 
 
-static func _get_html_footer(analysis_time_ms: int, type_names_json: String, severity_types_json: String) -> String:
+static func _get_html_footer(
+	analysis_time_ms: int,
+	type_names_json: String,
+	severity_types_json: String,
+) -> String:
 	return """</div>
 <div id="noResults" class="no-results" style="display:none;">No issues match the current filters</div>
 
@@ -298,4 +317,12 @@ static func _get_context_section(context: String) -> String:
 static func _format_html_issue(issue, severity: String) -> String:
 	var escaped_message: String = issue.message.replace("<", "&lt;").replace(">", "&gt;")
 	var escaped_path: String = issue.file_path.replace("\\", "/")
-	return "<div class=\"issue\" data-severity=\"%s\" data-type=\"%s\" data-file=\"%s\"><span class=\"location\">%s:%d</span><span class=\"message\">%s</span><span class=\"check-id\">%s</span></div>\n" % [severity, issue.check_id, escaped_path, escaped_path, issue.line, escaped_message, issue.check_id]
+	return "<div class=\"issue\" data-severity=\"%s\" data-type=\"%s\" data-file=\"%s\"><span class=\"location\">%s:%d</span><span class=\"message\">%s</span><span class=\"check-id\">%s</span></div>\n" % [
+		severity,
+		issue.check_id,
+		escaped_path,
+		escaped_path,
+		issue.line,
+		escaped_message,
+		issue.check_id,
+	]

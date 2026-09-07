@@ -56,6 +56,25 @@ touches, so nothing is forgotten:
 
 Do not write counts of checks or fixtures into prose. They rot.
 
+## Formatting
+
+Every `.gd` file is formatted with the sibling `gdscript-formatter`, and the
+test suite fails on drift. `.editorconfig` at the root carries the style and
+excludes fixture sources, whose exact shape is what they test. After editing
+GDScript:
+
+```bash
+gdscript-formatter --verify-structure .
+```
+
+`--verify-structure` matters. The formatter refuses to write a file when its
+output would parse differently, and two constructs in this codebase trigger
+that: a lambda passed inline as an argument that is long enough to wrap, and a
+method chain long enough to wrap with backslash continuations. Both are
+formatter bugs, and both are avoided by writing the code differently: bind the
+lambda to a local `Callable` first, and split a long chain over a local
+variable. When a file "fails to format", that is what to look for.
+
 ## Verifying a change
 
 Run the suite. Then install into a real game project with `copy.sh` and diff its

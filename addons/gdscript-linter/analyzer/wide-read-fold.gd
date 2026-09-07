@@ -46,17 +46,19 @@ func clear() -> void:
 
 
 func defer(line: int, member: String, owner: Array, owner_label: String, near: String) -> void:
-	_reads.append({
-		"line": line,
-		"member": member,
-		"owner_path": ".".join(owner),
-		"owner_label": owner_label,
-		"near": near,
-	})
+	_reads.append(
+		{
+			"line": line,
+			"member": member,
+			"owner_path": ".".join(owner),
+			"owner_label": owner_label,
+			"near": near,
+		}
+	)
 
 
 func issues(path: String, entry: Dictionary) -> Array:
-	var groups := {}
+	var groups := { }
 	for read: Dictionary in _reads:
 		var key: String = read.owner_path + " " + read.owner_label
 		if not groups.has(key):
@@ -66,7 +68,7 @@ func issues(path: String, entry: Dictionary) -> Array:
 	var issues: Array = []
 	for key: String in groups:
 		var reads: Array = groups[key]
-		var members := {}
+		var members := { }
 		for read: Dictionary in reads:
 			members[read.member] = true
 		var names: Array = members.keys()
@@ -87,12 +89,16 @@ func _lone_unknown_member(path: String, read: Dictionary, candidate: String):
 		message += " (did you mean '%s'?)" % read.near
 	elif not candidate.is_empty():
 		message += " (%s has it; is '%s' declared too wide?)" % [candidate, read.owner_path]
-	return IssueClass.create(
-		path, read.line, IssueClass.Severity.CRITICAL, _check_id, message)
+	return IssueClass.create(path, read.line, IssueClass.Severity.CRITICAL, _check_id, message)
 
 
-func _wide_declaration(path: String, entry: Dictionary, reads: Array, names: Array,
-		candidate: String):
+func _wide_declaration(
+	path: String,
+	entry: Dictionary,
+	reads: Array,
+	names: Array,
+	candidate: String,
+):
 	var owner_path: String = reads[0].owner_path
 	var owner_label: String = reads[0].owner_label
 
@@ -107,13 +113,13 @@ func _wide_declaration(path: String, entry: Dictionary, reads: Array, names: Arr
 	if names.size() > shown.size():
 		listed += ", and %d more" % (names.size() - shown.size())
 
-	var message := ("'%s' is declared as %s, but %d members are read from it that %s "
+	var message := (
+		"'%s' is declared as %s, but %d members are read from it that %s "
 		+ "does not have (%s). %s has all of them: narrow the declaration to it, "
-		+ "or cast at the use sites.") % [
-			owner_path, owner_label, names.size(), owner_label, listed, candidate]
+		+ "or cast at the use sites."
+	) % [owner_path, owner_label, names.size(), owner_label, listed, candidate]
 
-	return IssueClass.create(
-		path, line, IssueClass.Severity.WARNING, _check_id, message)
+	return IssueClass.create(path, line, IssueClass.Severity.WARNING, _check_id, message)
 
 
 # Where a class-level member is written, so a wide declaration is reported where
@@ -123,7 +129,7 @@ func _declaration_line(entry: Dictionary, member: String) -> int:
 		if String(declaration.get("kind", "")) != "variable":
 			continue
 		if not String(declaration.get("scope", "")).is_empty():
-			continue  # a local, not the member being read from
+			continue # a local, not the member being read from
 		if String(declaration.get("name", "")) == member:
 			return GDLintSourceIndex.line_of(declaration)
 	return 0

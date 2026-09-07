@@ -17,11 +17,11 @@ const ANCESTRY_LIMIT := 50
 
 ## Member sets, keyed by type name. A native type is keyed "native:<name>" so it
 ## cannot collide with a script class of the same name.
-var _cache := {}
+var _cache := { }
 ## class_name -> res:// path, for classes declared by project scripts.
-var _paths := {}
+var _paths := { }
 ## class_name -> the base it declares, for walking ancestry without loading.
-var _bases := {}
+var _bases := { }
 
 
 ## Read the project's class list. Call once per run, before anything else here.
@@ -36,10 +36,10 @@ func build_class_map() -> void:
 
 
 func of_script(script: Script) -> Dictionary:
-	var names := {}
-	var types := {}
-	var signals := {}
-	var methods := {}
+	var names := { }
+	var types := { }
+	var signals := { }
+	var methods := { }
 
 	for prop in script.get_script_property_list():
 		# Drops the per-file category rows the property list interleaves.
@@ -63,14 +63,14 @@ func of_script(script: Script) -> Dictionary:
 		signals.merge(native_members.signals)
 		methods.merge(native_members.methods)
 
-	return {"names": names, "types": types, "signals": signals, "methods": methods}
+	return { "names": names, "types": types, "signals": signals, "methods": methods }
 
 
 func of_class(class_name_str: String) -> Dictionary:
 	if _cache.has(class_name_str):
 		return _cache[class_name_str]
 
-	var resolved := {"names": {}, "types": {}, "signals": {}, "methods": {}}
+	var resolved := { "names": { }, "types": { }, "signals": { }, "methods": { } }
 	if _paths.has(class_name_str):
 		var script: Script = load(_paths[class_name_str]) as Script
 		if script != null and not script.get_instance_base_type().is_empty():
@@ -87,10 +87,10 @@ func of_native(native: String) -> Dictionary:
 	if _cache.has(cache_key):
 		return _cache[cache_key]
 
-	var names := {}
-	var types := {}
-	var signals := {}
-	var methods := {}
+	var names := { }
+	var types := { }
+	var signals := { }
+	var methods := { }
 	for prop in ClassDB.class_get_property_list(native):
 		names[prop.name] = true
 		_record_type(types, prop)
@@ -103,7 +103,7 @@ func of_native(native: String) -> Dictionary:
 	for constant in ClassDB.class_get_integer_constant_list(native):
 		names[constant] = true
 
-	var resolved := {"names": names, "types": types, "signals": signals, "methods": methods}
+	var resolved := { "names": names, "types": types, "signals": signals, "methods": methods }
 	_cache[cache_key] = resolved
 	return resolved
 
@@ -150,7 +150,7 @@ func type_with_all_members(owner_label: String, wanted: Array) -> String:
 		if _members_present(members.names, wanted) < wanted.size():
 			continue
 		if not best.is_empty():
-			return ""  # two classes fit; naming either one would be a guess
+			return "" # two classes fit; naming either one would be a guess
 		best = candidate
 	return best
 
@@ -173,9 +173,10 @@ func _derives_from(candidate: String, ancestor: String) -> bool:
 		if current == ancestor:
 			return true
 		guard += 1
-	return (ClassDB.class_exists(current) and ClassDB.class_exists(ancestor)
-		and ClassDB.is_parent_class(current, ancestor))
-
+	return (
+		ClassDB.class_exists(current) and ClassDB.class_exists(ancestor)
+		and ClassDB.is_parent_class(current, ancestor)
+	)
 
 # Names bound by a local, parameter or loop variable, keyed by the scope they are
 # bound in. A chain rooted in one of these is skipped: the member of that name may

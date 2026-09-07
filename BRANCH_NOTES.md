@@ -432,6 +432,38 @@ here to confirm it.
 
 ---
 
+## Formatting
+
+Every `.gd` file is formatted with the fork's `gdscript-formatter`, and the
+suite enforces it. This was adopted after the node-path check, once the
+formatter was already a build dependency; until then the code was formatted by
+hand and nothing checked it.
+
+The style is the formatter's default, tabs and 100 columns, written down in
+`.editorconfig` so it is discoverable. Fixture sources are excluded there: a
+line that is deliberately 135 characters long, or a declaration wrapped a
+particular way, is the test, and formatting it would rewrite what it pins.
+
+Two formatter bugs surfaced, both caught by `--verify-structure`, which refuses
+to write output that parses differently from its input. A lambda passed inline
+as an argument gains a trailing comma inside its body when wrapped. A method
+chain wrapped with backslash continuations changes shape too. Neither was
+fixed in the formatter; the affected lines were rewritten so they no longer
+need wrapping, which also reads better. `CLAUDE.md` says what to look for when
+a file refuses to format.
+
+Verified that the reformat changed no behaviour: the linter's own findings over
+the addon were compared before and after, ignoring line numbers. The
+differences are all layout-sensitive upstream checks reacting to wrapped lines,
+such as a function crossing the length threshold or a nesting check counting
+continuation indentation. The number of findings suppressed by ignore
+directives is the same before and after, so no directive was moved off the
+line it governs.
+
+This widens the rebase surface: every upstream file is now restyled. That is a
+known cost, taken deliberately, and the reformat is its own commit so it can be
+reapplied mechanically on a newer upstream by running the formatter again.
+
 ## The two-repo split
 
 Structure and meaning come from different places, and keeping that straight is the

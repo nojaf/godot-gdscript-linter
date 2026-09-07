@@ -336,6 +336,36 @@ describe("unit", () => {
   );
 });
 
+/**
+ * Formatting is enforced here rather than by convention, so that the rule
+ * survives whoever edits the code next. `.editorconfig` at the repository root
+ * carries the style and excludes the fixture sources, whose exact shape is what
+ * they test. Failing files are listed with the command that fixes them.
+ */
+describe("formatting", () => {
+  test(
+    "every GDScript file is formatted",
+    async () => {
+      const result = await $`${process.env.GDLINT_FORMATTER} --check . -x .godot`
+        .cwd(REPO)
+        .quiet()
+        .nothrow();
+      if (result.exitCode !== 0) {
+        const files = (result.stdout.toString() + result.stderr.toString())
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.endsWith(".gd"));
+        throw new Error(
+          `${files.length} GDScript file(s) are not formatted:\n` +
+            files.map((file) => `    ${file}`).join("\n") +
+            `\n  fix: cd ${REPO} && ${process.env.GDLINT_FORMATTER} .`,
+        );
+      }
+    },
+    MINUTE,
+  );
+});
+
 const names = readdirSync(FIXTURES)
   .filter((entry) => existsSync(join(FIXTURES, entry, "config")))
   .sort();

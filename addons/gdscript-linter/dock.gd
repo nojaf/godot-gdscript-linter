@@ -31,7 +31,7 @@ const ISSUE_TYPES := {
 	"unused-parameter": "Unused Parameter",
 	"ascii-violation": "ASCII Violation",
 	"strict-limit": "Strict Limit",
-	"sealed-violation": "Sealed Violation"
+	"sealed-violation": "Sealed Violation",
 }
 
 # Preload scripts
@@ -54,7 +54,7 @@ var settings_button: Button
 var settings_panel: PanelContainer
 
 # State
-var current_result  # AnalysisResult instance
+var current_result # AnalysisResult instance
 var current_severity_filter: String = "all"
 var current_type_filter: String = "all"
 var current_file_filter: String = ""
@@ -63,8 +63,8 @@ var current_file_filter: String = ""
 var _hovered_claude_link: String = ""
 var _claude_context_menu: PopupMenu
 var _claude_tooltip: PanelContainer
-var _grouped_issues_by_type: Dictionary = {}  # check_id -> Array of issues
-var _grouped_issues_by_severity: Dictionary = {}  # severity -> Array of issues
+var _grouped_issues_by_type: Dictionary = { } # check_id -> Array of issues
+var _grouped_issues_by_severity: Dictionary = { } # severity -> Array of issues
 
 # Claude tooltip/popup styles (stored for theme updates)
 var _claude_tooltip_style: StyleBoxFlat
@@ -75,18 +75,18 @@ var _claude_popup_context_style: StyleBoxFlat
 
 # Claude customize dialog
 var _claude_customize_popup: PanelContainer
-var _claude_customize_context: RichTextLabel  # Shows issue(s) being sent
+var _claude_customize_context: RichTextLabel # Shows issue(s) being sent
 var _claude_customize_command: LineEdit
 var _claude_customize_instructions: TextEdit
-var _claude_customize_pending_link: String = ""  # Store link while dialog is open
-var _claude_context_menu_link: String = ""  # Store link when context menu opens
+var _claude_customize_pending_link: String = "" # Store link while dialog is open
+var _claude_context_menu_link: String = "" # Store link when context menu opens
 
 # Current config instance for settings
 var current_config: Resource
 
 # Settings manager and controls
 var settings_manager: RefCounted
-var settings_controls: Dictionary = {}
+var settings_controls: Dictionary = { }
 
 # Background (stored for theme updates)
 var _bg_rect: ColorRect
@@ -114,7 +114,7 @@ var _export_prefix_label: Label
 var _export_path_label: Label
 var _last_export_path: String = ""
 var _last_export_content: String = ""
-var _last_export_type: String = ""  # "json", "html", "md"
+var _last_export_type: String = "" # "json", "html", "md"
 
 # Theme-derived muted color hex for BBCode (replaces hardcoded #888888)
 var _muted_hex: String = "#888888"
@@ -181,7 +181,7 @@ func _init_node_references() -> void:
 
 	# Add internal content padding to results label
 	var results_style := StyleBoxFlat.new()
-	results_style.bg_color = Color(0, 0, 0, 0)  # Transparent background
+	results_style.bg_color = Color(0, 0, 0, 0) # Transparent background
 	results_style.set_content_margin_all(10)
 	results_label.add_theme_stylebox_override("normal", results_style)
 
@@ -201,7 +201,6 @@ func _setup_background() -> void:
 	_bg_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_bg_rect)
 	move_child(_bg_rect, 0)
-
 
 
 func _init_config_and_settings_panel() -> void:
@@ -275,10 +274,14 @@ func _restore_saved_filters() -> void:
 	if saved_severity >= 0 and saved_severity < severity_filter.item_count:
 		severity_filter.select(saved_severity)
 		match saved_severity:
-			0: current_severity_filter = "all"
-			1: current_severity_filter = "critical"
-			2: current_severity_filter = "warning"
-			3: current_severity_filter = "info"
+			0:
+				current_severity_filter = "all"
+			1:
+				current_severity_filter = "critical"
+			2:
+				current_severity_filter = "warning"
+			3:
+				current_severity_filter = "info"
 
 	# Restore file filter text
 	file_filter.text = settings_manager.saved_file_filter
@@ -292,7 +295,7 @@ func _setup_busy_overlay() -> void:
 	# Create overlay container that covers the entire plugin
 	_busy_overlay = Control.new()
 	_busy_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_busy_overlay.mouse_filter = Control.MOUSE_FILTER_STOP  # Block all mouse input
+	_busy_overlay.mouse_filter = Control.MOUSE_FILTER_STOP # Block all mouse input
 	_busy_overlay.visible = false
 	_busy_overlay.z_index = 50
 	add_child(_busy_overlay)
@@ -345,8 +348,6 @@ func _setup_busy_overlay() -> void:
 	add_child(_busy_animation_timer)
 
 
-
-
 # Updates all dynamically-created UI elements with fresh theme colors
 func _apply_theme_to_dynamic_ui() -> void:
 	# Main background
@@ -366,7 +367,10 @@ func _apply_theme_to_dynamic_ui() -> void:
 		_export_notification_style.bg_color = GDLintThemeColors.get_color("panel_bg")
 		_export_notification_style.border_color = GDLintThemeColors.get_color("border")
 	if _export_path_label:
-		_export_path_label.add_theme_color_override("font_color", GDLintThemeColors.get_color("font_muted"))
+		_export_path_label.add_theme_color_override(
+			"font_color",
+			GDLintThemeColors.get_color("font_muted"),
+		)
 
 	# Claude tooltip
 	if _claude_tooltip_style:
@@ -465,7 +469,10 @@ func _setup_export_notification() -> void:
 	path_hbox.add_child(_export_prefix_label)
 
 	_export_path_label = Label.new()
-	_export_path_label.add_theme_color_override("font_color", GDLintThemeColors.get_color("font_muted"))
+	_export_path_label.add_theme_color_override(
+		"font_color",
+		GDLintThemeColors.get_color("font_muted"),
+	)
 	_export_path_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_export_path_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	path_hbox.add_child(_export_path_label)
@@ -551,7 +558,11 @@ func _on_export_open_file() -> void:
 	match _last_export_type:
 		"json":
 			# Open in Godot editor
-			var resource = ResourceLoader.load(_last_export_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+			var resource = ResourceLoader.load(
+				_last_export_path,
+				"",
+				ResourceLoader.CACHE_MODE_REPLACE,
+			)
 			if resource:
 				EditorInterface.edit_resource(resource)
 		"html", "md":
@@ -589,7 +600,11 @@ func _write_export_file(export_path: String, content: String, format_label: Stri
 	if not DirAccess.dir_exists_absolute(dir_path):
 		var abs_dir := ProjectSettings.globalize_path(dir_path)
 		push_error("Code Quality: Export directory does not exist: %s" % abs_dir)
-		OS.alert("Export directory does not exist:\n%s\n\nCheck your Export Folder setting or reset it to default." % abs_dir, "Export Error")
+		OS.alert(
+			"Export directory does not exist:\n%s\n\nCheck your Export Folder setting or reset it to default."
+			% abs_dir,
+			"Export Error",
+		)
 		return false
 
 	var file := FileAccess.open(export_path, FileAccess.WRITE)
@@ -600,8 +615,14 @@ func _write_export_file(export_path: String, content: String, format_label: Stri
 
 	var err := FileAccess.get_open_error()
 	var abs_path := ProjectSettings.globalize_path(export_path)
-	push_error("Code Quality: Failed to write %s report to %s (error %d)" % [format_label, abs_path, err])
-	OS.alert("Failed to write %s export file:\n%s\n\nError code: %d\nCheck file permissions and that the directory exists." % [format_label, abs_path, err], "Export Error")
+	push_error(
+		"Code Quality: Failed to write %s report to %s (error %d)" % [format_label, abs_path, err]
+	)
+	OS.alert(
+		"Failed to write %s export file:\n%s\n\nError code: %d\nCheck file permissions and that the directory exists."
+		% [format_label, abs_path, err],
+		"Export Error",
+	)
 	return false
 
 
@@ -627,6 +648,7 @@ var _checks_changed_while_settings_open: bool = false
 
 # Track if export notification was visible before opening settings
 var _export_notification_was_visible: bool = false
+
 
 # Called when any setting changes - just track that checks changed, don't re-scan
 func _on_setting_changed(key: String, _value: Variant) -> void:
@@ -654,7 +676,7 @@ func _populate_type_filter(sev_filter: String = "all") -> void:
 
 
 func _get_available_types_for_severity(sev_filter: String) -> Dictionary:
-	var available: Dictionary = {}
+	var available: Dictionary = { }
 	if not current_result:
 		return available
 
@@ -662,10 +684,14 @@ func _get_available_types_for_severity(sev_filter: String) -> Dictionary:
 	for issue in current_result.issues:
 		var matches_severity := false
 		match sev_filter:
-			"all": matches_severity = true
-			"critical": matches_severity = issue.severity == Issue.Severity.CRITICAL
-			"warning": matches_severity = issue.severity == Issue.Severity.WARNING
-			"info": matches_severity = issue.severity == Issue.Severity.INFO
+			"all":
+				matches_severity = true
+			"critical":
+				matches_severity = issue.severity == Issue.Severity.CRITICAL
+			"warning":
+				matches_severity = issue.severity == Issue.Severity.WARNING
+			"info":
+				matches_severity = issue.severity == Issue.Severity.INFO
 
 		if matches_severity:
 			available[issue.check_id] = true
@@ -756,9 +782,9 @@ func _build_export_dict(issues: Array) -> Dictionary:
 			"total_lines": current_result.total_lines,
 			"total_issues": issues.size(),
 			"filtered": settings_manager.filter_exports,
-			"analysis_time_ms": current_result.analysis_time_ms
+			"analysis_time_ms": current_result.analysis_time_ms,
 		},
-		"issues": issues_array
+		"issues": issues_array,
 	}
 
 	var context := _get_export_context()
@@ -788,7 +814,9 @@ func _on_export_pressed() -> void:
 
 func _on_html_export_pressed() -> void:
 	if not current_result:
-		var AnalysisResultScript = preload("res://addons/gdscript-linter/analyzer/analysis-result.gd")
+		var AnalysisResultScript = preload(
+			"res://addons/gdscript-linter/analyzer/analysis-result.gd"
+		)
 		current_result = AnalysisResultScript.new()
 
 	var issues_to_export: Array
@@ -797,8 +825,14 @@ func _on_html_export_pressed() -> void:
 	else:
 		issues_to_export = current_result.issues
 
-	var HtmlReportGenerator = preload("res://addons/gdscript-linter/analyzer/html-report-generator.gd")
-	var html := HtmlReportGenerator.generate(current_result, issues_to_export, _get_export_context())
+	var HtmlReportGenerator = preload(
+		"res://addons/gdscript-linter/analyzer/html-report-generator.gd"
+	)
+	var html := HtmlReportGenerator.generate(
+		current_result,
+		issues_to_export,
+		_get_export_context(),
+	)
 	var export_path := _get_export_path("code_quality_report.html")
 
 	if _write_export_file(export_path, html, "HTML"):
@@ -807,7 +841,9 @@ func _on_html_export_pressed() -> void:
 
 func _on_md_export_pressed() -> void:
 	if not current_result:
-		var AnalysisResultScript = preload("res://addons/gdscript-linter/analyzer/analysis-result.gd")
+		var AnalysisResultScript = preload(
+			"res://addons/gdscript-linter/analyzer/analysis-result.gd"
+		)
 		current_result = AnalysisResultScript.new()
 
 	var issues_to_export: Array
@@ -826,10 +862,14 @@ func _on_md_export_pressed() -> void:
 
 func _on_severity_filter_changed(index: int) -> void:
 	match index:
-		0: current_severity_filter = "all"
-		1: current_severity_filter = "critical"
-		2: current_severity_filter = "warning"
-		3: current_severity_filter = "info"
+		0:
+			current_severity_filter = "all"
+		1:
+			current_severity_filter = "critical"
+		2:
+			current_severity_filter = "warning"
+		3:
+			current_severity_filter = "info"
 
 	if current_result:
 		var prev_type := current_type_filter
@@ -872,7 +912,7 @@ func _save_filter_selections() -> void:
 		settings_manager.save_filter_selections(
 			severity_filter.selected,
 			current_type_filter,
-			file_filter.text
+			file_filter.text,
 		)
 
 
@@ -1066,9 +1106,14 @@ func _show_claude_customize_popup() -> void:
 		if _grouped_issues_by_type.has(type_key):
 			var issues: Array = _grouped_issues_by_type[type_key]
 			context_text = "[b]Batch: %d issues of type '%s'[/b]\n\n" % [issues.size(), type_key]
-			for i in range(mini(issues.size(), 5)):  # Show first 5
+			for i in range(mini(issues.size(), 5)): # Show first 5
 				var issue = issues[i]
-				context_text += "[color=#6688aa]%d.[/color] %s:%d - %s\n" % [i + 1, issue.file_path, issue.line, issue.message]
+				context_text += "[color=#6688aa]%d.[/color] %s:%d - %s\n" % [
+					i + 1,
+					issue.file_path,
+					issue.line,
+					issue.message,
+				]
 			if issues.size() > 5:
 				context_text += "[color=#666677]... and %d more[/color]" % (issues.size() - 5)
 
@@ -1078,9 +1123,14 @@ func _show_claude_customize_popup() -> void:
 		if _grouped_issues_by_severity.has(severity_key):
 			var issues: Array = _grouped_issues_by_severity[severity_key]
 			context_text = "[b]Batch: %d %s issues[/b]\n\n" % [issues.size(), severity_key]
-			for i in range(mini(issues.size(), 5)):  # Show first 5
+			for i in range(mini(issues.size(), 5)): # Show first 5
 				var issue = issues[i]
-				context_text += "[color=#6688aa]%d.[/color] %s:%d - %s\n" % [i + 1, issue.file_path, issue.line, issue.message]
+				context_text += "[color=#6688aa]%d.[/color] %s:%d - %s\n" % [
+					i + 1,
+					issue.file_path,
+					issue.line,
+					issue.message,
+				]
 			if issues.size() > 5:
 				context_text += "[color=#666677]... and %d more[/color]" % (issues.size() - 5)
 
@@ -1092,7 +1142,7 @@ func _show_claude_customize_popup() -> void:
 	var popup_size := _claude_customize_popup.custom_minimum_size
 	_claude_customize_popup.global_position = Vector2(
 		(screen_size.x - popup_size.x) / 2,
-		(screen_size.y - popup_size.y) / 2
+		(screen_size.y - popup_size.y) / 2,
 	)
 	_claude_customize_popup.visible = true
 
@@ -1123,7 +1173,7 @@ func _on_claude_customize_launch() -> void:
 				"line": int(parts[1]),
 				"check_id": parts[2],
 				"severity": parts[3],
-				"message": parts[4]
+				"message": parts[4],
 			}
 			_launch_claude_code_custom(issue_data, custom_command, custom_instructions)
 
@@ -1131,20 +1181,31 @@ func _on_claude_customize_launch() -> void:
 	elif _claude_customize_pending_link.begins_with("claude-type://"):
 		var type_key: String = _claude_customize_pending_link.substr(14).uri_decode()
 		if _grouped_issues_by_type.has(type_key):
-			_launch_claude_code_batch_custom(_grouped_issues_by_type[type_key], custom_command, custom_instructions)
+			_launch_claude_code_batch_custom(
+				_grouped_issues_by_type[type_key],
+				custom_command,
+				custom_instructions,
+			)
 
 	# Handle batch severity-level links
 	elif _claude_customize_pending_link.begins_with("claude-severity://"):
 		var severity_key: String = _claude_customize_pending_link.substr(18)
 		if _grouped_issues_by_severity.has(severity_key):
-			_launch_claude_code_batch_custom(_grouped_issues_by_severity[severity_key], custom_command, custom_instructions)
+			_launch_claude_code_batch_custom(
+				_grouped_issues_by_severity[severity_key],
+				custom_command,
+				custom_instructions,
+			)
 
 	_claude_customize_pending_link = ""
 
 
 func _on_meta_hover_started(meta: Variant) -> void:
 	var link := str(meta)
-	if link.begins_with("claude://") or link.begins_with("claude-type://") or link.begins_with("claude-severity://"):
+	if (
+		link.begins_with("claude://") or link.begins_with("claude-type://")
+		or link.begins_with("claude-severity://")
+	):
 		_hovered_claude_link = link
 		_show_claude_tooltip()
 
@@ -1173,8 +1234,11 @@ func _on_results_gui_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
 			if _hovered_claude_link != "" and settings_manager.claude_code_enabled:
 				_hide_claude_tooltip()
-				_claude_context_menu_link = _hovered_claude_link  # Store before menu opens
-				_claude_context_menu.position = DisplayServer.mouse_get_position() + Vector2i(16, -8)
+				_claude_context_menu_link = _hovered_claude_link # Store before menu opens
+				_claude_context_menu.position = DisplayServer.mouse_get_position() + Vector2i(
+					16,
+					-8,
+				)
 				_claude_context_menu.popup()
 				get_viewport().set_input_as_handled()
 
@@ -1203,7 +1267,7 @@ func _on_claude_context_menu_selected(id: int) -> void:
 				"line": int(parts[1]),
 				"check_id": parts[2],
 				"severity": parts[3],
-				"message": parts[4]
+				"message": parts[4],
 			}
 			_launch_claude_code(issue_data, use_plan_mode)
 		return
@@ -1227,9 +1291,12 @@ func _matches_severity(issue) -> bool:
 		return true
 	var Issue = IssueScript
 	match current_severity_filter:
-		"critical": return issue.severity == Issue.Severity.CRITICAL
-		"warning": return issue.severity == Issue.Severity.WARNING
-		"info": return issue.severity == Issue.Severity.INFO
+		"critical":
+			return issue.severity == Issue.Severity.CRITICAL
+		"warning":
+			return issue.severity == Issue.Severity.WARNING
+		"info":
+			return issue.severity == Issue.Severity.INFO
 	return false
 
 
@@ -1254,7 +1321,7 @@ func _build_report_header() -> String:
 	bbcode += "Files: %d | Lines: %d | Time: %dms\n" % [
 		current_result.files_analyzed,
 		current_result.total_lines,
-		current_result.analysis_time_ms
+		current_result.analysis_time_ms,
 	]
 
 	var summary_parts: Array[String] = []
@@ -1277,22 +1344,35 @@ func _build_active_filters_text(count: int) -> String:
 	if current_file_filter != "":
 		active.append("\"%s\"" % current_file_filter)
 	if active.size() > 0:
-		return "[color=%s]Filters: %s (%d matches)[/color]\n\n" % [_muted_hex, ", ".join(active), count]
+		return "[color=%s]Filters: %s (%d matches)[/color]\n\n" % [
+			_muted_hex,
+			", ".join(active),
+			count,
+		]
 	return ""
 
 
 func _group_issues_by_severity(issues: Array) -> Dictionary:
 	var Issue = IssueScript
-	var grouped := {"critical": [], "warning": [], "info": []}
+	var grouped := { "critical": [], "warning": [], "info": [] }
 	for issue in issues:
 		match issue.severity:
-			Issue.Severity.CRITICAL: grouped.critical.append(issue)
-			Issue.Severity.WARNING: grouped.warning.append(issue)
-			Issue.Severity.INFO: grouped.info.append(issue)
+			Issue.Severity.CRITICAL:
+				grouped.critical.append(issue)
+			Issue.Severity.WARNING:
+				grouped.warning.append(issue)
+			Issue.Severity.INFO:
+				grouped.info.append(issue)
 	return grouped
 
 
-func _format_severity_section(issues: Array, label: String, emoji: String, color: String, severity_key: String) -> String:
+func _format_severity_section(
+	issues: Array,
+	label: String,
+	emoji: String,
+	color: String,
+	severity_key: String,
+) -> String:
 	if issues.size() == 0:
 		return ""
 	var bbcode := "[color=%s][b]%s %s (%d)[/b][/color]" % [color, emoji, label, issues.size()]
@@ -1325,7 +1405,7 @@ func _display_results() -> void:
 	_grouped_issues_by_severity = {
 		"critical": grouped.critical,
 		"warning": grouped.warning,
-		"info": grouped.info
+		"info": grouped.info,
 	}
 
 	bbcode += _format_severity_section(grouped.critical, "CRITICAL", "🔴", "#ff6b6b", "critical")
@@ -1344,7 +1424,7 @@ func _display_results() -> void:
 func _format_issues_by_type(issues: Array, color: String, severity_key: String) -> String:
 	var bbcode := ""
 
-	var by_type: Dictionary = {}
+	var by_type: Dictionary = { }
 	for issue in issues:
 		var check_id: String = issue.check_id
 		if not by_type.has(check_id):
@@ -1357,7 +1437,9 @@ func _format_issues_by_type(issues: Array, color: String, severity_key: String) 
 		_grouped_issues_by_type[type_key] = by_type[check_id]
 
 	var type_keys := by_type.keys()
-	type_keys.sort_custom(func(a, b): return by_type[a].size() > by_type[b].size())
+	var larger_first := func(a, b) -> bool:
+		return by_type[a].size() > by_type[b].size()
+	type_keys.sort_custom(larger_first)
 
 	var is_first_type := true
 	for check_id in type_keys:
@@ -1383,12 +1465,22 @@ func _format_issues_by_type(issues: Array, color: String, severity_key: String) 
 	return bbcode
 
 
+func _display_path_of(issue) -> String:
+	if settings_manager.show_full_path:
+		return issue.file_path
+	return issue.file_path.get_file()
+
+
 func _format_issue(issue, color: String) -> String:
-	var display_path: String = issue.file_path if settings_manager.show_full_path else issue.file_path.get_file()
+	var display_path: String = _display_path_of(issue)
 	var link := "%s:%d" % [issue.file_path, issue.line]
 
 	var line := "    [url=%s][color=%s]%s:%d[/color][/url] %s" % [
-		link, color, display_path, issue.line, issue.message
+		link,
+		color,
+		display_path,
+		issue.line,
+		issue.message,
 	]
 
 	# Add Claude Code button if enabled
@@ -1396,13 +1488,19 @@ func _format_issue(issue, color: String) -> String:
 		var severity_str: String = "unknown"
 		var Issue = IssueScript
 		match issue.severity:
-			Issue.Severity.CRITICAL: severity_str = "critical"
-			Issue.Severity.WARNING: severity_str = "warning"
-			Issue.Severity.INFO: severity_str = "info"
+			Issue.Severity.CRITICAL:
+				severity_str = "critical"
+			Issue.Severity.WARNING:
+				severity_str = "warning"
+			Issue.Severity.INFO:
+				severity_str = "info"
 
 		var claude_data := "%s|%d|%s|%s|%s" % [
-			issue.file_path, issue.line, issue.check_id, severity_str,
-			issue.message.replace("|", "-")
+			issue.file_path,
+			issue.line,
+			issue.check_id,
+			severity_str,
+			issue.message.replace("|", "-"),
 		]
 		line += " [url=claude://%s][img=20x20]res://addons/gdscript-linter/icons/claude.png[/img][/url]" % claude_data.uri_encode()
 
@@ -1423,7 +1521,7 @@ func _format_ignored_section() -> String:
 		return ""
 
 	# Group by type
-	var by_type: Dictionary = {}
+	var by_type: Dictionary = { }
 	for issue in ignored:
 		var check_id: String = issue.check_id
 		if not by_type.has(check_id):
@@ -1434,7 +1532,9 @@ func _format_ignored_section() -> String:
 
 	# Sort by count descending
 	var type_keys := by_type.keys()
-	type_keys.sort_custom(func(a, b): return by_type[a].size() > by_type[b].size())
+	var larger_first := func(a, b) -> bool:
+		return by_type[a].size() > by_type[b].size()
+	type_keys.sort_custom(larger_first)
 
 	for check_id in type_keys:
 		var type_issues: Array = by_type[check_id]
@@ -1444,17 +1544,23 @@ func _format_ignored_section() -> String:
 		if type_issues.size() <= 3:
 			var refs: Array[String] = []
 			for issue in type_issues:
-				var display_path: String = issue.file_path if settings_manager.show_full_path else issue.file_path.get_file()
+				var display_path: String = _display_path_of(issue)
 				var link := "%s:%d" % [issue.file_path, issue.line]
 				refs.append("[url=%s]%s:%d[/url]" % [link, display_path, issue.line])
 			bbcode += "  [color=#555555]%s: %s[/color]\n" % [type_name.to_lower(), ", ".join(refs)]
 		else:
-			bbcode += "  [color=#555555]%s (%d):[/color]\n" % [type_name.to_lower(), type_issues.size()]
+			bbcode += "  [color=#555555]%s (%d):[/color]\n" % [
+				type_name.to_lower(),
+				type_issues.size(),
+			]
 			for issue in type_issues:
-				var display_path: String = issue.file_path if settings_manager.show_full_path else issue.file_path.get_file()
+				var display_path: String = _display_path_of(issue)
 				var link := "%s:%d" % [issue.file_path, issue.line]
 				bbcode += "    [url=%s][color=#555555]%s:%d[/color][/url] %s\n" % [
-					link, display_path, issue.line, issue.message
+					link,
+					display_path,
+					issue.line,
+					issue.message,
 				]
 
 	return bbcode
@@ -1484,7 +1590,7 @@ func _handle_claude_single_link(location: String) -> void:
 			"line": int(parts[1]),
 			"check_id": parts[2],
 			"severity": parts[3],
-			"message": parts[4]
+			"message": parts[4],
 		}
 		_on_claude_button_pressed(issue_data)
 	else:
@@ -1562,7 +1668,11 @@ func _launch_claude_code(issue: Dictionary, use_plan_mode: bool) -> void:
 		command = settings_manager.claude_code_command
 	else:
 		# Remove --permission-mode plan if present for immediate execution
-		command = settings_manager.claude_code_command.replace("--permission-mode plan", "").strip_edges()
+		var without_plan: String = settings_manager.claude_code_command.replace(
+			"--permission-mode plan",
+			"",
+		)
+		command = without_plan.strip_edges()
 		if command.is_empty():
 			command = "claude"
 
@@ -1583,9 +1693,12 @@ func _launch_claude_code_batch(issues: Array, use_plan_mode: bool) -> void:
 		var issue = issues[i]
 		var severity_str: String = "unknown"
 		match issue.severity:
-			Issue.Severity.CRITICAL: severity_str = "critical"
-			Issue.Severity.WARNING: severity_str = "warning"
-			Issue.Severity.INFO: severity_str = "info"
+			Issue.Severity.CRITICAL:
+				severity_str = "critical"
+			Issue.Severity.WARNING:
+				severity_str = "warning"
+			Issue.Severity.INFO:
+				severity_str = "info"
 
 		prompt += "%d. %s:%d\n" % [i + 1, issue.file_path, issue.line]
 		prompt += "   Type: %s | Severity: %s\n" % [issue.check_id, severity_str]
@@ -1605,7 +1718,11 @@ func _launch_claude_code_batch(issues: Array, use_plan_mode: bool) -> void:
 	if use_plan_mode:
 		command = settings_manager.claude_code_command
 	else:
-		command = settings_manager.claude_code_command.replace("--permission-mode plan", "").strip_edges()
+		var without_plan: String = settings_manager.claude_code_command.replace(
+			"--permission-mode plan",
+			"",
+		)
+		command = without_plan.strip_edges()
 		if command.is_empty():
 			command = "claude"
 
@@ -1613,7 +1730,11 @@ func _launch_claude_code_batch(issues: Array, use_plan_mode: bool) -> void:
 
 
 # Launches Claude Code with custom command and instructions (from customize dialog)
-func _launch_claude_code_custom(issue: Dictionary, custom_command: String, custom_instructions: String) -> void:
+func _launch_claude_code_custom(
+	issue: Dictionary,
+	custom_command: String,
+	custom_instructions: String,
+) -> void:
 	var project_path := ProjectSettings.globalize_path("res://")
 
 	var prompt := "Code quality issue to fix:\n\n"
@@ -1635,7 +1756,11 @@ func _launch_claude_code_custom(issue: Dictionary, custom_command: String, custo
 
 
 # Launches Claude Code with multiple issues using custom command/instructions
-func _launch_claude_code_batch_custom(issues: Array, custom_command: String, custom_instructions: String) -> void:
+func _launch_claude_code_batch_custom(
+	issues: Array,
+	custom_command: String,
+	custom_instructions: String,
+) -> void:
 	if issues.is_empty():
 		return
 
@@ -1648,9 +1773,12 @@ func _launch_claude_code_batch_custom(issues: Array, custom_command: String, cus
 		var issue = issues[i]
 		var severity_str: String = "unknown"
 		match issue.severity:
-			Issue.Severity.CRITICAL: severity_str = "critical"
-			Issue.Severity.WARNING: severity_str = "warning"
-			Issue.Severity.INFO: severity_str = "info"
+			Issue.Severity.CRITICAL:
+				severity_str = "critical"
+			Issue.Severity.WARNING:
+				severity_str = "warning"
+			Issue.Severity.INFO:
+				severity_str = "info"
 
 		prompt += "%d. %s:%d\n" % [i + 1, issue.file_path, issue.line]
 		prompt += "   Type: %s | Severity: %s\n" % [issue.check_id, severity_str]
@@ -1677,12 +1805,18 @@ func _launch_claude_code_batch_custom(issues: Array, custom_command: String, cus
 func _launch_in_terminal(shell_command: String, project_path: String) -> void:
 	if OS.has_feature("windows"):
 		var args: PackedStringArray = [
-			"-d", project_path,
-			"powershell", "-NoProfile", "-NoExit",
-			"-Command", shell_command
+			"-d",
+			project_path,
+			"powershell",
+			"-NoProfile",
+			"-NoExit",
+			"-Command",
+			shell_command,
 		]
 		if OS.create_process("wt", args) == -1:
-			push_error("gdscript-linter: could not launch Windows Terminal (wt) for the Claude Code integration")
+			push_error(
+				"gdscript-linter: could not launch Windows Terminal (wt) for the Claude Code integration"
+			)
 		return
 
 	if OS.has_feature("linux"):
@@ -1692,7 +1826,7 @@ func _launch_in_terminal(shell_command: String, project_path: String) -> void:
 		# itself, which spares every emulator its own working-directory flag.
 		var linux_command := "cd '%s' && { %s ; }; exec bash" % [
 			project_path.replace("'", "''"),
-			shell_command
+			shell_command,
 		]
 		# xdg-terminal-exec resolves whatever the desktop's default terminal is
 		# (Hyprland setups such as Omarchy wire their launcher to it); the rest
@@ -1715,10 +1849,14 @@ func _launch_in_terminal(shell_command: String, project_path: String) -> void:
 			# -1 is a failed spawn (binary absent); anything else means it is running.
 			if OS.create_process(terminal[0], argv) != -1:
 				return
-		push_error("gdscript-linter: no terminal emulator could be launched for the Claude Code integration."
+		push_error(
+			"gdscript-linter: no terminal emulator could be launched for the Claude Code integration."
 			+ " Install one (alacritty, ghostty or kitty) or set your default terminal,"
-			+ " or run the command yourself:\n    cd %s\n    %s" % [project_path, shell_command])
+			+ " or run the command yourself:\n    cd %s\n    %s" % [project_path, shell_command]
+		)
 		return
 
-	push_error("gdscript-linter: launching Claude Code from the dock is not supported on this platform."
-		+ " Run the command in a terminal:\n    cd %s\n    %s" % [project_path, shell_command])
+	push_error(
+		"gdscript-linter: launching Claude Code from the dock is not supported on this platform."
+		+ " Run the command in a terminal:\n    cd %s\n    %s" % [project_path, shell_command]
+	)

@@ -36,7 +36,6 @@ const CHECK_METHOD_NOT_CALLED := "method-not-called"
 ## list, so they are skipped entirely.
 const DYNAMIC_PROPERTY_HOOKS := ["_get_property_list", "_set", "_get"]
 
-
 var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
@@ -51,7 +50,7 @@ func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = 
 	_respect_ignores = p_respect_ignores
 	_types.build_class_map()
 
-	var scripts := {}      # path -> Script, null when it failed to compile
+	var scripts := { } # path -> Script, null when it failed to compile
 	var broken: Array = []
 	for path: String in file_paths:
 		var script: Script = load(path) as Script
@@ -94,7 +93,7 @@ func run(index: GDLintSourceIndex, file_paths: Array, p_respect_ignores: bool = 
 # analysis, and the consequence is one extra finding rather than a wrong one.
 func _report_load_failures(index: GDLintSourceIndex, broken: Array) -> Array:
 	var declared := index.declared_classes()
-	var caused_by := {}
+	var caused_by := { }
 	for path: String in broken:
 		var base := index.file_extends(path)
 		if base.is_empty():
@@ -107,7 +106,7 @@ func _report_load_failures(index: GDLintSourceIndex, broken: Array) -> Array:
 		if base_path != path and broken.has(base_path):
 			caused_by[path] = base_path
 
-	var dependents := {}
+	var dependents := { }
 	for path in caused_by.keys():
 		var root: String = caused_by[path]
 		var guard := 0
@@ -123,8 +122,9 @@ func _report_load_failures(index: GDLintSourceIndex, broken: Array) -> Array:
 		var message := "Script fails to compile (see the parse error above)"
 		if dependents.has(path):
 			message += "; %d dependent script(s) fail because of it" % dependents[path]
-		issues.append(IssueClass.create(
-			path, 1, IssueClass.Severity.CRITICAL, CHECK_LOAD_FAILED, message))
+		issues.append(
+			IssueClass.create(path, 1, IssueClass.Severity.CRITICAL, CHECK_LOAD_FAILED, message)
+		)
 	return issues
 
 
@@ -177,16 +177,16 @@ func _check_file(index: GDLintSourceIndex, path: String, script: Script) -> Arra
 
 
 func _locals_by_scope(entry: Dictionary) -> Dictionary:
-	var locals := {}
+	var locals := { }
 	for declaration: Dictionary in entry.declarations:
 		var kind := String(declaration.get("kind", ""))
 		if kind != "variable" and kind != "parameter" and kind != "constant":
 			continue
 		var scope := String(declaration.get("scope", ""))
 		if scope.is_empty():
-			continue  # a class-level member, not a local
+			continue # a class-level member, not a local
 		if not locals.has(scope):
-			locals[scope] = {}
+			locals[scope] = { }
 		locals[scope][String(declaration.get("name", ""))] = true
 	return locals
 
@@ -205,7 +205,13 @@ func _is_shadowed(locals: Dictionary, scope: String, name: String) -> bool:
 	return false
 
 
-func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label: String, locals: Dictionary):
+func _check_chain(
+	path: String,
+	chain: Dictionary,
+	root: Dictionary,
+	root_label: String,
+	locals: Dictionary,
+):
 	var segments: Array = chain.get("segments", [])
 	if segments.is_empty():
 		return null
@@ -226,7 +232,7 @@ func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label:
 		names.append(String(segment.get("name", "")))
 		last_is_call = kind == "call"
 		if kind == "call":
-			break  # the return type is unknown; nothing past this resolves
+			break # the return type is unknown; nothing past this resolves
 
 	if names.is_empty():
 		return null
@@ -235,7 +241,7 @@ func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label:
 	if names[0] == "self":
 		start = 1
 	elif _is_shadowed(locals, scope, names[0]) or not root.names.has(names[0]):
-		return null  # a local, or not ours to resolve
+		return null # a local, or not ours to resolve
 
 	var current := root
 	var owner_label := root_label
@@ -251,8 +257,13 @@ func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label:
 			# own members. Held back: the same variable failing repeatedly is one
 			# wrong annotation, not one bug per line. Decided by GDLintWideReadFold.
 			if index > start:
-				_fold.defer(line, name, names.slice(start, index), owner_label,
-					_types.closest_member(name, current.names))
+				_fold.defer(
+					line,
+					name,
+					names.slice(start, index),
+					owner_label,
+					_types.closest_member(name, current.names),
+				)
 				return null
 			return _unknown_member(path, line, name, owner_label, current)
 
@@ -279,23 +290,37 @@ func _check_chain(path: String, chain: Dictionary, root: Dictionary, root_label:
 	return null
 
 
-func _unknown_member(path: String, line: int, member: String, owner_label: String,
-		current: Dictionary):
+func _unknown_member(
+	path: String,
+	line: int,
+	member: String,
+	owner_label: String,
+	current: Dictionary,
+):
 	var message := "'%s' is not a member of %s" % [member, owner_label]
 	var suggestion := _types.closest_member(member, current.names)
 	if not suggestion.is_empty():
 		message += " (did you mean '%s'?)" % suggestion
 	return IssueClass.create(
-		path, line, IssueClass.Severity.CRITICAL, CHECK_UNKNOWN_MEMBER, message)
+		path,
+		line,
+		IssueClass.Severity.CRITICAL,
+		CHECK_UNKNOWN_MEMBER,
+		message,
+	)
 
 
 func _method_not_called(path: String, line: int, name: String):
 	if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_METHOD_NOT_CALLED):
 		return null
 	return IssueClass.create(
-		path, line, IssueClass.Severity.CRITICAL, CHECK_METHOD_NOT_CALLED,
+		path,
+		line,
+		IssueClass.Severity.CRITICAL,
+		CHECK_METHOD_NOT_CALLED,
 		"'%s' is a method used as a condition without being called; " % name
-		+ "the reference is always true (did you mean '%s()'?)" % name)
+		+ "the reference is always true (did you mean '%s()'?)" % name,
+	)
 
 
 # Signals have no default arguments, so the expected count is exact.
@@ -305,8 +330,12 @@ func _check_signal_arity(path: String, line: int, signal_name: String, given: in
 	if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_ARGUMENT_COUNT):
 		return null
 	return IssueClass.create(
-		path, line, IssueClass.Severity.CRITICAL, CHECK_ARGUMENT_COUNT,
-		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected])
+		path,
+		line,
+		IssueClass.Severity.CRITICAL,
+		CHECK_ARGUMENT_COUNT,
+		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected],
+	)
 
 
 # Members of a loaded script: its own plus, already merged by the engine, those

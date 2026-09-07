@@ -1,0 +1,17 @@
+# Formatting for the GDScript in this repository, read by gdscript-formatter.
+# The test suite runs `gdscript-formatter --check` over the repository, so a
+# file that drifts from this fails `bun test`. To fix: gdscript-formatter .
+root = true
+
+[*.gd]
+indent_style = tab
+max_line_length = 100
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Fixture sources are test inputs whose exact shape is the test: a line that
+# is deliberately 135 characters long, a declaration wrapped a particular way,
+# a comment placed to look like code. Formatting them would rewrite what they
+# exist to pin. generate.gd and the unit runner are code and are formatted.
+[tests/fixtures/**/src/*.gd]
+gdscript_formatter_exclude = true

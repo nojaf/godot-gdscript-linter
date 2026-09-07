@@ -23,9 +23,20 @@ const CHECK_UNUSED_FUNCTION := "unused-function"
 
 ## Calls whose string arguments name a method.
 const METHOD_NAME_CALLS := [
-	"call", "call_deferred", "callv", "call_group", "call_group_flags",
-	"has_method", "rpc", "rpc_id", "connect", "disconnect", "is_connected",
-	"emit_signal", "Callable", "bind",
+	"call",
+	"call_deferred",
+	"callv",
+	"call_group",
+	"call_group_flags",
+	"has_method",
+	"rpc",
+	"rpc_id",
+	"connect",
+	"disconnect",
+	"is_connected",
+	"emit_signal",
+	"Callable",
+	"bind",
 ]
 
 ## Data files Godot calls methods from, which the index does not parse.
@@ -36,9 +47,9 @@ var _ignore_handler := GDLintIgnoreHandler.new()
 var _respect_ignores: bool = true
 
 # Identifier -> occurrences anywhere in the project.
-var _occurrences := {}
+var _occurrences := { }
 # Function name -> how many times it is declared.
-var _declaration_counts := {}
+var _declaration_counts := { }
 
 
 ## Report unused functions in the given res:// paths, using a built index.
@@ -81,7 +92,7 @@ func _count_from_index(index: GDLintSourceIndex, include_addons: bool) -> void:
 				_add(String(segment.get("name", "")))
 
 		for literal: Dictionary in entry.string_literals:
-			var argument_of: Dictionary = literal.get("argument_of", {})
+			var argument_of: Dictionary = literal.get("argument_of", { })
 			if METHOD_NAME_CALLS.has(String(argument_of.get("callee", ""))):
 				_add(String(literal.get("value", "")))
 
@@ -124,7 +135,7 @@ func _count_from_data_files(include_addons: bool) -> void:
 func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 	var entry: Dictionary = index.file_records(path)
 	if entry.is_empty() or entry.get("parse_error", false):
-		return []  # nothing trustworthy to say about a file that did not parse
+		return [] # nothing trustworthy to say about a file that did not parse
 
 	var script: Script = load(path) as Script
 	if script == null or script.get_instance_base_type().is_empty():
@@ -152,7 +163,7 @@ func _check_file(index: GDLintSourceIndex, path: String) -> Array:
 		if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_UNUSED_FUNCTION):
 			continue
 
-		candidates.append({"name": name, "path": path, "line": line})
+		candidates.append({ "name": name, "path": path, "line": line })
 
 	if _respect_ignores:
 		_ignore_handler.clear()
@@ -181,7 +192,7 @@ func _self_occurrences(entry: Dictionary, declaration: Dictionary) -> int:
 	for literal: Dictionary in entry.string_literals:
 		if String(literal.get("scope", "")) != body_scope:
 			continue
-		var argument_of: Dictionary = literal.get("argument_of", {})
+		var argument_of: Dictionary = literal.get("argument_of", { })
 		if METHOD_NAME_CALLS.has(String(argument_of.get("callee", ""))) \
 				and String(literal.get("value", "")) == name:
 			count += 1
@@ -204,7 +215,7 @@ func _is_referenced(name: String, self_occurrences: int) -> bool:
 # plus its overrides, or an @abstract declaration plus its implementations, is one
 # dead contract rather than one problem per site.
 func _group_by_name(candidates: Array) -> Array:
-	var by_name := {}
+	var by_name := { }
 	for candidate in candidates:
 		var name: String = candidate.name
 		if not by_name.has(name):
@@ -214,18 +225,26 @@ func _group_by_name(candidates: Array) -> Array:
 	var issues: Array = []
 	for name: String in by_name.keys():
 		var sites: Array = by_name[name]
-		sites.sort_custom(func(a, b):
-			if a.path == b.path:
-				return a.line < b.line
-			return a.path < b.path)
+		sites.sort_custom(
+			func(a, b):
+				if a.path == b.path:
+					return a.line < b.line
+				return a.path < b.path,
+		)
 
 		var first: Dictionary = sites[0]
 		var message := "Function '%s' is never referenced in the project" % name
 		if sites.size() > 1:
 			message += " (declared in %d places)" % sites.size()
-		issues.append(IssueClass.create(
-			first.path, first.line, IssueClass.Severity.WARNING,
-			CHECK_UNUSED_FUNCTION, message))
+		issues.append(
+			IssueClass.create(
+				first.path,
+				first.line,
+				IssueClass.Severity.WARNING,
+				CHECK_UNUSED_FUNCTION,
+				message,
+			)
+		)
 	return issues
 
 
@@ -233,7 +252,7 @@ func _group_by_name(candidates: Array) -> Array:
 # the method LIST includes them. Using has_method here would mark every lifecycle
 # override as dead code.
 func _native_method_names(native: String) -> Dictionary:
-	var names := {}
+	var names := { }
 	if native.is_empty():
 		return names
 	for method in ClassDB.class_get_method_list(native):
@@ -288,10 +307,9 @@ func _extract_ascii_identifiers(path: String) -> PackedStringArray:
 	var current := PackedByteArray()
 	for byte in bytes:
 		var is_identifier_char := (
-			(byte >= 65 and byte <= 90) or
-			(byte >= 97 and byte <= 122) or
-			(byte >= 48 and byte <= 57) or
-			byte == 95)
+			(byte >= 65 and byte <= 90) or (byte >= 97 and byte <= 122)
+			or (byte >= 48 and byte <= 57) or byte == 95
+		)
 		if is_identifier_char:
 			current.append(byte)
 		else:

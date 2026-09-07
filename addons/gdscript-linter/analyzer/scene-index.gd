@@ -14,7 +14,11 @@ extends RefCounted
 ## A relative path here is what `$` resolves against: "" is the scene root and
 ## "Panel/Box" is two levels below it.
 
-enum Verdict { FOUND, MISSING, UNKNOWN }
+enum Verdict {
+	FOUND,
+	MISSING,
+	UNKNOWN,
+}
 
 const SCENE_EXTENSIONS := ["tscn", "scn"]
 
@@ -28,7 +32,7 @@ const INSTANCE_DEPTH_LIMIT := 32
 ## "from_instance": bool, "unique": bool }. `from_instance` marks a node an
 ## instanced sub-scene brought with it: it is owned by that sub-scene's root, so
 ## its unique name is not visible from the outer scene.
-var scenes := {}
+var scenes := { }
 
 
 ## Read every scene under res://. Addon scenes are skipped unless an addon is
@@ -40,9 +44,9 @@ func build(include_addons: bool) -> void:
 			continue
 		var packed := ResourceLoader.load(path, "PackedScene") as PackedScene
 		if packed == null:
-			continue  # a scene that does not load has no tree to check against
+			continue # a scene that does not load has no tree to check against
 		var nodes := _tree_of(packed.get_state(), 0)
-		scenes[path] = {"nodes": nodes, "unique": _unique_names(nodes)}
+		scenes[path] = { "nodes": nodes, "unique": _unique_names(nodes) }
 
 
 ## Every (scene, node) that carries a script, as
@@ -55,7 +59,7 @@ func attachments() -> Array:
 			var script := String(nodes[node_path]["script"])
 			if script.is_empty():
 				continue
-			found.append({"scene": scene_path, "node": node_path, "script": script})
+			found.append({ "scene": scene_path, "node": node_path, "script": script })
 	return found
 
 
@@ -113,13 +117,13 @@ func is_unique(scene_path: String, node_path: String) -> bool:
 		return false
 	var nodes: Dictionary = scenes[scene_path]["nodes"]
 	return nodes.has(node_path) and bool(nodes[node_path]["unique"]) \
-		and not bool(nodes[node_path]["from_instance"])
+			and not bool(nodes[node_path]["from_instance"])
 
 
 # An inherited scene starts as its base and overlays its own nodes on top,
 # which is also the order the engine builds it in.
 func _tree_of(state: SceneState, depth: int) -> Dictionary:
-	var nodes := {}
+	var nodes := { }
 	if depth > INSTANCE_DEPTH_LIMIT:
 		return nodes
 	var base := state.get_base_scene_state()
@@ -150,7 +154,12 @@ func _tree_of(state: SceneState, depth: int) -> Dictionary:
 
 func _node_at(nodes: Dictionary, path: String) -> Dictionary:
 	if not nodes.has(path):
-		nodes[path] = {"script": "", "placeholder": false, "from_instance": false, "unique": false}
+		nodes[path] = {
+			"script": "",
+			"placeholder": false,
+			"from_instance": false,
+			"unique": false,
+		}
 	return nodes[path]
 
 
@@ -168,7 +177,7 @@ func _merge_instance(nodes: Dictionary, prefix: String, sub: Dictionary) -> void
 
 
 func _unique_names(nodes: Dictionary) -> Dictionary:
-	var unique := {}
+	var unique := { }
 	for path: String in nodes:
 		if bool(nodes[path]["unique"]) and not bool(nodes[path]["from_instance"]):
 			unique[path.get_file()] = path

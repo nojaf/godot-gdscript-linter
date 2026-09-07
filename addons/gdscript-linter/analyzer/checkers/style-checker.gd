@@ -39,7 +39,7 @@ func _check_long_line(line: String, line_num: int) -> Variant:
 		"line": line_num,
 		"severity": "info",
 		"check_id": "long-line",
-		"message": "Line exceeds %d chars (%d)" % [config.max_line_length, line.length()]
+		"message": "Line exceeds %d chars (%d)" % [config.max_line_length, line.length()],
 	}
 
 
@@ -109,16 +109,16 @@ static func without_strings(text: String) -> String:
 		var character := text[i]
 		if not quote.is_empty():
 			if character == "\\" and i + 1 < text.length():
-				out += "  "  # an escaped character cannot close the string
+				out += "  " # an escaped character cannot close the string
 				i += 1
 			elif character == quote:
-				out += character  # both quotes stay, so the string is still visible
+				out += character # both quotes stay, so the string is still visible
 				quote = ""
 			else:
 				out += " "
 		elif character == "\"" or character == "'":
 			quote = character
-			out += character  # the quote itself stays, so positions still line up
+			out += character # the quote itself stays, so positions still line up
 		else:
 			out += character
 		i += 1
@@ -163,7 +163,7 @@ func check_magic_numbers(line: String, line_num: int) -> Variant:
 			"line": line_num,
 			"severity": "info",
 			"check_id": "magic-number",
-			"message": "Magic number %s (consider using a named constant)" % num_str
+			"message": "Magic number %s (consider using a named constant)" % num_str,
 		}
 
 	return null
@@ -184,7 +184,7 @@ func check_commented_code(line: String, line_num: int) -> Variant:
 				"line": line_num,
 				"severity": "info",
 				"check_id": "commented-code",
-				"message": "Commented-out code detected"
+				"message": "Commented-out code detected",
 			}
 	return null
 
@@ -215,7 +215,7 @@ func check_variable_type_hints(line: String, line_num: int) -> Variant:
 		"line": line_num,
 		"severity": "info",
 		"check_id": "missing-type-hint",
-		"message": "Variable '%s' has no type annotation" % var_name
+		"message": "Variable '%s' has no type annotation" % var_name,
 	}
 
 
@@ -231,7 +231,7 @@ func check_todo_comments(trimmed: String, line_num: int) -> Variant:
 				"line": line_num,
 				"severity": severity,
 				"check_id": "todo-comment",
-				"message": "%s: %s" % [pattern, comment_text]
+				"message": "%s: %s" % [pattern, comment_text],
 			}
 	return null
 
@@ -251,6 +251,7 @@ func check_print_statements(trimmed: String, line_num: int) -> Variant:
 					"line": line_num,
 					"severity": "warning",
 					"check_id": "print-statement",
-					"message": "Debug print statement: %s" % trimmed.substr(0, mini(60, trimmed.length()))
+					"message": "Debug print statement: %s"
+					% trimmed.substr(0, mini(60, trimmed.length())),
 				}
 	return null

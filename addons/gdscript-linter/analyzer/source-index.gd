@@ -28,7 +28,7 @@ const BINARY_ENV := "GDLINT_FORMATTER"
 const BINARY_NAMES := ["gdscript-formatter"]
 
 ## Per-file records, keyed by res:// path.
-var files := {}
+var files := { }
 ## Set when the index could not be built. Callers must check this first.
 var error := ""
 
@@ -40,8 +40,7 @@ func build(excluded: Array = []) -> bool:
 
 	var binary := _find_binary()
 	if binary.is_empty():
-		error = ("gdscript-formatter not found. Set %s to its path, "
-			+ "or put it on PATH.") % BINARY_ENV
+		error = ("gdscript-formatter not found. Set %s to its path, " + "or put it on PATH.") % BINARY_ENV
 		return false
 
 	var project_root := ProjectSettings.globalize_path("res://").rstrip("/")
@@ -64,12 +63,12 @@ func build(excluded: Array = []) -> bool:
 # header. A line that does not parse is fatal rather than skipped: a partially
 # read index would silently under-report.
 func _parse(text: String) -> bool:
-	var current: Dictionary = {}
+	var current: Dictionary = { }
 
 	for line in text.split("\n"):
 		var trimmed := line.strip_edges()
 		if trimmed.is_empty() or not trimmed.begins_with("{"):
-			continue  # the binary writes progress lines to stderr, but be safe
+			continue # the binary writes progress lines to stderr, but be safe
 
 		var record = JSON.parse_string(trimmed)
 		if typeof(record) != TYPE_DICTIONARY:
@@ -83,7 +82,7 @@ func _parse(text: String) -> bool:
 			continue
 
 		if current.is_empty():
-			continue  # a record before any header; nothing to attach it to
+			continue # a record before any header; nothing to attach it to
 		_append(current, record)
 
 	return true
@@ -92,9 +91,11 @@ func _parse(text: String) -> bool:
 func _start_file(header: Dictionary) -> Dictionary:
 	var schema := int(header.get("schema", -1))
 	if schema != SUPPORTED_SCHEMA:
-		error = ("index schema %d is not supported (expected %d). "
-			+ "Rebuild gdscript-formatter or update the addon.") % [schema, SUPPORTED_SCHEMA]
-		return {}
+		error = (
+			"index schema %d is not supported (expected %d). "
+			+ "Rebuild gdscript-formatter or update the addon."
+		) % [schema, SUPPORTED_SCHEMA]
+		return { }
 
 	var path := String(header.get("path", ""))
 	var entry := {
@@ -127,7 +128,7 @@ const RECORD_BUCKETS := {
 func _append(entry: Dictionary, record: Dictionary) -> void:
 	var bucket: String = RECORD_BUCKETS.get(record.get("record", ""), "")
 	if bucket.is_empty():
-		return  # an unknown record kind is additive, not an error
+		return # an unknown record kind is additive, not an error
 	entry[bucket].append(record)
 
 
@@ -166,7 +167,7 @@ func file_records(path: String) -> Dictionary:
 	var normalized := path.replace("\\", "/")
 	if not normalized.begins_with("res://"):
 		normalized = "res://" + normalized.lstrip("/")
-	return files.get(normalized, {})
+	return files.get(normalized, { })
 
 
 ## What a file's own script extends, or "". The header holds the base as written,
@@ -190,7 +191,7 @@ func file_extends(path: String) -> String:
 ## Unlike the engine's global class list this is read from the files as they are
 ## on disk, so a `class_name` added since the last `--import` is in it.
 func declared_classes() -> Dictionary:
-	var classes := {}
+	var classes := { }
 	for path: String in files:
 		for declaration: Dictionary in files[path].declarations:
 			if String(declaration.get("kind", "")) != "class":
@@ -204,7 +205,7 @@ func declared_classes() -> Dictionary:
 
 ## The line a record starts on, one-based, matching what issues report.
 static func line_of(record: Dictionary) -> int:
-	return int(record.get("range", {}).get("start_row", 1))
+	return int(record.get("range", { }).get("start_row", 1))
 
 
 ## Segment names of a member chain. Stops at the first segment that is not a
