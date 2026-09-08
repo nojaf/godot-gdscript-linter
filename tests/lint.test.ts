@@ -88,7 +88,7 @@ process.env.GDLINT_FORMATTER = await findFormatter();
 
 // Said out loud because both are variables the results depend on, and neither
 // is obvious: the Godot picked up from PATH may not be the one you develop
-// against, and the formatter is rebuilt from a sibling checkout on every run.
+// against, and the formatter is whatever build the sibling checkout has right now.
 const version = (await $`${GODOT} --version`.quiet().nothrow()).text().trim();
 console.log(`godot     ${GODOT} (${version})`);
 console.log(`formatter ${process.env.GDLINT_FORMATTER}`);

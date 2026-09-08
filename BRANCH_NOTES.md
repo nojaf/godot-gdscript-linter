@@ -505,7 +505,7 @@ Requirement 7 is implemented. `extends` now appears in two places, holding the
 base as written:
 
 ```jsonl
-{"record": "file",        "schema": 1, "path": "res://hud/hud.gd", "extends": "Node"}
+{"record": "file",        "path": "res://hud/hud.gd", "extends": "Node"}
 {"record": "declaration", "kind": "class", "name": "Hud", "extends": "Node", ...}
 ```
 
@@ -522,13 +522,25 @@ rebuilt together and neither is in production. The spec records the rule for whe
 to bump, the conditions that end the current arrangement, and a table of every
 shape change made under version 1 so an unexpected build can be diagnosed.
 
-**What that means in practice.** The addon's version guard is deliberately inert
-for now. `SUPPORTED_SCHEMA` is 1 and will keep matching across incompatible
-changes, so it cannot be relied on to catch a mismatched build. Until the number
-starts moving, the real safety net is rechecking after every formatter change:
-assert the fields the checks read, diff findings against a saved baseline, and
-confirm stderr is free of `SCRIPT ERROR`. That was done for both requirement 7 and
-requirement 8, and both came back identical.
+**What that means in practice.** The `schema` field is gone from both sides:
+the addon stopped checking it, then the producer stopped writing it. A guard
+whose number never moves is worse than none: it reads as a promise. The index
+is a feature of a locally built fork that exists for this linter, one version
+of it is ever supported, and a shape change this side does not know about fails
+a fixture or crashes a check, which is the intended signal.
+The safety net is rechecking after every formatter change: assert the fields
+the checks read, diff findings against a saved baseline, and confirm stderr is
+free of `SCRIPT ERROR`. That was done for both requirement 7 and requirement 8,
+and both came back identical.
+
+For the same reason `scripts/install-formatter.sh` stopped building the
+formatter. It used to rebuild the sibling checkout on every test run so that
+both sides were always built together, and grew checks for cargo, a C compiler
+and the rustc version along the way: the linter policing its dependency's
+dependencies. Now it resolves the binary (`GDLINT_FORMATTER`, else the sibling
+checkout's release build, else PATH), verifies it has the `index` sub-command,
+and prints the path. Keeping that build current after editing the formatter is
+the editor's job, like any other local tool.
 
 **What that unlocked.** `member-check.gd` has no regular expressions left in it.
 The last two, `_declared_class_name` and `_declared_base`, folded cascading load
@@ -691,11 +703,10 @@ Nothing here is blocking. Ordered by how ready each is to pick up.
    here are CLI-only, by choice, because this project is developed from an external editor.
    Wiring them into the dock is work nobody has done.
 
-3. **Watch for a schema that never moves.** `SUPPORTED_SCHEMA` is 1 and the
-   producer keeps it there across incompatible changes on purpose. Recheck after
-   every formatter change rather than trusting the guard: assert the fields the
-   checks read, diff findings against a saved baseline, confirm stderr has no
-   `SCRIPT ERROR`.
+3. **There is no index version, on purpose.** The `file` record carries no
+   `schema` field and the addon would not read one. Recheck after every formatter change
+   instead: rebuild the sibling checkout, assert the fields the checks read, diff
+   findings against a saved baseline, confirm stderr has no `SCRIPT ERROR`.
 
 ## Where this is going
 

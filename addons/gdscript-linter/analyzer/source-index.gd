@@ -21,9 +21,6 @@ extends RefCounted
 ## A missing or unusable binary is a hard error: reporting nothing looks exactly
 ## like a clean project, so this must never fall back to guessing.
 
-## Bumped by the producer when record shapes change in a breaking way.
-const SUPPORTED_SCHEMA := 1
-
 const BINARY_ENV := "GDLINT_FORMATTER"
 const BINARY_NAMES := ["gdscript-formatter"]
 
@@ -88,15 +85,11 @@ func _parse(text: String) -> bool:
 	return true
 
 
+## The index carries no version this consumer checks. The formatter fork and
+## this linter are one system edited together, and a shape change that this
+## side does not know about shows up as a crash or a wrong finding in the
+## fixtures, which is a louder signal than a number that nobody bumps.
 func _start_file(header: Dictionary) -> Dictionary:
-	var schema := int(header.get("schema", -1))
-	if schema != SUPPORTED_SCHEMA:
-		error = (
-			"index schema %d is not supported (expected %d). "
-			+ "Rebuild gdscript-formatter or update the addon."
-		) % [schema, SUPPORTED_SCHEMA]
-		return { }
-
 	var path := String(header.get("path", ""))
 	var entry := {
 		"path": path,

@@ -139,11 +139,11 @@ the fork. Check it out beside this repository:
 git clone -b nojaf https://github.com/nojaf/GDScript-formatter
 ```
 
-The scripts find it there, build it, and verify the binary can do the job;
-`scripts/install-formatter.sh` explains itself if anything above is missing.
-Rust and the C compiler are only needed to build the formatter. The built
-binary stands alone, and `cargo install --path .` from that checkout puts it
-on PATH permanently if you would rather not rebuild on every run.
+Then `cargo build --release` in that checkout. Rust and the C compiler are only
+needed for that build, and the scripts here never run it: they pick up the
+release binary from the sibling checkout (or `GDLINT_FORMATTER`, or PATH), verify
+it has the `index` sub-command, and use whatever is there. Rebuild after editing
+the formatter. `scripts/install-formatter.sh` says what to do if it is missing.
 
 ## Installation
 

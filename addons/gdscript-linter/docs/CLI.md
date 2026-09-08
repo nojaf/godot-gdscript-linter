@@ -137,33 +137,36 @@ those checks refuse to run and the process exits 3. They never fall back to
 checking less, because a report with nothing in it looks exactly like a clean
 project.
 
-The linter and that binary are one system in two languages, so the repository
-builds it for you. Clone the formatter beside this repository:
+Clone the fork beside this repository and build it:
 
 ```
 ~/Projects/godot-gdscript-linter     <- this one
 ~/Projects/GDScript-formatter        <- the fork, on branch nojaf
 ```
 
-Then:
+```bash
+git clone -b nojaf https://github.com/nojaf/GDScript-formatter
+cd GDScript-formatter && cargo build --release
+```
+
+`scripts/install-formatter.sh` is the one place that resolves the binary: the
+one named by `GDLINT_FORMATTER`, else the sibling checkout's release build, else
+`gdscript-formatter` on PATH. It does not build or update it: the fork and this
+linter are edited together, and whoever edits the formatter rebuilds it. The
+index carries no version that the linter checks. A shape change the linter does
+not know about fails loudly, and that is preferred over a number nobody bumps.
+
+The script verifies the binary really has the `index` sub-command (GDQuest's
+original has the same name and does not) and prints its path, which is all it
+prints:
 
 ```bash
 export GDLINT_FORMATTER="$(scripts/install-formatter.sh)"
 ```
 
-The script finds the sibling checkout, builds it in release mode, verifies the
-binary really has the `index` sub-command, and prints its path. That is all it
-prints, so the command above works as written; progress and errors go to stderr.
-`GDLINT_FORMATTER_REPO` overrides where it looks, and setting `GDLINT_FORMATTER`
-yourself pins a binary that it verifies but does not rebuild.
-
-The `lint.sh` that `copy.sh` generates calls the same script on every run, so the
-two sides are always built from matching sources. An up-to-date build takes a
-fraction of a second. That matters more than it sounds: the index format is
-versioned by policy rather than by a number that moves, so rebuilding together is
-the actual guard against a mismatched producer. Disabling every index-backed
-check through its `NO_*_CHECK=1` switch, which the generated `lint.sh` lists at
-the top, skips the requirement entirely.
+The `lint.sh` that `copy.sh` generates calls it on every run. Disabling every
+index-backed check through its `NO_*_CHECK=1` switch, which the generated
+`lint.sh` lists at the top, skips the requirement entirely.
 
 ## Member Checking (`--check-members`)
 

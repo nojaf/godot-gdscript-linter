@@ -18,8 +18,11 @@ must not start.
 If a check needs a fact about the source that the index does not carry, add it
 on the formatter side first: a requirement in the spec, a collector under
 `src/index/collectors/`, an exact-output test. Then consume it here through
-`GDLintSourceIndex`. `scripts/install-formatter.sh` rebuilds the binary from the
-sibling checkout on every test run, so both sides are always built together.
+`GDLintSourceIndex`. `scripts/install-formatter.sh` resolves the binary, by
+default the release build in the sibling checkout, and never builds it: after a
+formatter change, `cargo build --release` there before running the suite here.
+There is no index version to bump: a shape change this side does not know about
+fails a fixture, and that is the intended signal.
 
 ## Where things are
 
@@ -64,7 +67,7 @@ excludes fixture sources, whose exact shape is what they test. After editing
 GDScript:
 
 ```bash
-gdscript-formatter --verify-structure .
+"$(scripts/install-formatter.sh)" --verify-structure .
 ```
 
 `--verify-structure` matters. The formatter refuses to write a file when its

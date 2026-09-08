@@ -8,7 +8,7 @@ bun test --watch            # while working on a checker
 
 The run prints which Godot and which formatter binary it used. Both matter, and
 neither is obvious: the Godot found on `PATH` may not be the one you develop
-against, and the formatter is rebuilt from a sibling checkout every run.
+against, and the formatter is whatever build the sibling checkout has right now.
 
 ## What you need
 
@@ -18,12 +18,14 @@ against, and the formatter is rebuilt from a sibling checkout every run.
   on Arch, `pacman -S godot-mono` puts `godot-mono` there). Set
   `GODOT=/path/to/godot` to pin a specific one, which is worth doing if you
   have several installed.
-- **The formatter**, checked out beside this repository. The index-backed checks
-  read source structure from `gdscript-formatter index` and cannot run without
-  it, so the suite builds it rather than skipping them: a suite that quietly skips half
-  its cases reports success while testing nothing. See
-  `scripts/install-formatter.sh`, which the run calls for you and which explains
-  itself if the checkout is missing.
+- **The formatter fork**, built in release mode in a checkout beside this
+  repository (or pinned with `GDLINT_FORMATTER`, or on `PATH`). The
+  index-backed checks read source structure from
+  `gdscript-formatter index` and cannot run without it, so the suite fails
+  rather than skipping them: a suite that quietly skips half its cases reports
+  success while testing nothing. `scripts/install-formatter.sh` is what the run
+  calls to find it, and it says how to install the fork if it is missing. The
+  suite uses whatever build it finds, so rebuild after editing the formatter.
 
 Nothing needs importing first. Fixtures run in a fresh copy under a temporary
 directory, and the repository is imported automatically if `.godot` is absent.
