@@ -45,13 +45,24 @@ func clear() -> void:
 	_reads.clear()
 
 
-func defer(line: int, member: String, owner: Array, owner_label: String, near: String) -> void:
+## `owner_label` is the declaration as written and `owner_class` the type the
+## member is read from. They differ for a typed container: `slots[0].txt` reads
+## from `Button`, and the declaration to narrow is `Array[Button]`.
+func defer(
+	line: int,
+	member: String,
+	owner: Array,
+	owner_label: String,
+	owner_class: String,
+	near: String,
+) -> void:
 	_reads.append(
 		{
 			"line": line,
 			"member": member,
 			"owner_path": ".".join(owner),
 			"owner_label": owner_label,
+			"owner_class": owner_class,
 			"near": near,
 		}
 	)
@@ -73,7 +84,7 @@ func issues(path: String, entry: Dictionary) -> Array:
 			members[read.member] = true
 		var names: Array = members.keys()
 		names.sort()
-		var candidate := _types.type_with_all_members(String(reads[0].owner_label), names)
+		var candidate := _types.type_with_all_members(String(reads[0].owner_class), names)
 
 		if names.size() == 1 or candidate.is_empty():
 			for read: Dictionary in reads:
@@ -84,7 +95,7 @@ func issues(path: String, entry: Dictionary) -> Array:
 
 
 func _lone_unknown_member(path: String, read: Dictionary, candidate: String):
-	var message := "'%s' is not a member of %s" % [read.member, read.owner_label]
+	var message := "'%s' is not a member of %s" % [read.member, read.owner_class]
 	if not String(read.near).is_empty():
 		message += " (did you mean '%s'?)" % read.near
 	elif not candidate.is_empty():
@@ -101,6 +112,7 @@ func _wide_declaration(
 ):
 	var owner_path: String = reads[0].owner_path
 	var owner_label: String = reads[0].owner_label
+	var owner_class: String = reads[0].owner_class
 
 	var line: int = reads[0].line
 	if not owner_path.contains("."):
@@ -117,7 +129,7 @@ func _wide_declaration(
 		"'%s' is declared as %s, but %d members are read from it that %s "
 		+ "does not have (%s). %s has all of them: narrow the declaration to it, "
 		+ "or cast at the use sites."
-	) % [owner_path, owner_label, names.size(), owner_label, listed, candidate]
+	) % [owner_path, owner_label, names.size(), owner_class, listed, candidate]
 
 	return IssueClass.create(path, line, IssueClass.Severity.WARNING, _check_id, message)
 

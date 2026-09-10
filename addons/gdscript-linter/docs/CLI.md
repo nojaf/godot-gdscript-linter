@@ -49,7 +49,7 @@ godot --headless --script res://addons/gdscript-linter/analyzer/analyze-cli.gd -
 | `--github` | Shorthand for `--format github` (GitHub Actions annotations) |
 | `--output, -o <file>` | Write output to a file instead of stdout (`--sarif`/`--json`/`--html`) |
 | `--no-ignore` | Bypass all `gdlint:ignore` directives |
-| `--check-members` | Load every script; report ones that fail to compile and `self.foo.bar` accesses that resolve to nothing |
+| `--check-members` | Load every script; report ones that fail to compile, `self.foo.bar` accesses that resolve to nothing, and signal arity at both the emit and the connect |
 | `--check-unused-functions` | Report functions nothing in the project references |
 | `--check-exports` | Report object-typed `@export` vars that nothing null-guards |
 | `--check-node-paths` | Report `$Path`, `%Name` and `get_node("Path")` that name no node in any scene the script is attached to |
@@ -178,13 +178,14 @@ on disk to be current and the project to have been imported.
 godot --headless --script ... -- --check-members
 ```
 
-It reports two things, both CRITICAL (exit code 2):
+Everything it reports is CRITICAL (exit code 2):
 
 | Check | What it catches |
 |-------|-----------------|
 | `script-load-failed` | The script does not compile, so nothing in it can be checked. Godot's parse error goes to **stderr**; the linter adds the structured finding. Equivalent to running `--check-only` on every file at once. |
 | `unknown-member` | A name in a `self.foo.bar` chain is not a member of the type it is read from. |
 | `wrong-argument-count` | A signal is emitted with the wrong number of arguments. |
+| `wrong-parameter-count` | A signal is connected to a method that cannot take what it emits. |
 | `method-not-called` | A method is used as a condition without being called. |
 
 ### Why this is needed
@@ -230,6 +231,38 @@ compile with "Too few arguments" — and the script then shows up here as
 checked. The one case neither catches is a call through an untyped variable, which
 nothing can resolve.
 
+### Signal handler arity
+
+The other end of the same change. A signal that gained a parameter still connects
+to every handler written for the old shape, and the handler fails on the first
+emit with "Method expected 1 arguments, but called with 2". Godot checks nothing at
+the connect: not at parse, not with `--check-only`, not when the line runs.
+
+```gdscript
+signal selection_changed(previous: Critter, next: Critter)
+
+func _ready() -> void:
+	self.selection_changed.connect(self._on_selection_changed)  # calls it with 2
+
+func _on_selection_changed(critter: Critter) -> void:  # takes 1
+	...
+```
+
+The handler is resolved from what sits in the argument slot: `self._on_x`, the
+unqualified `_on_x`, or a method reached through a typed member such as
+`self.player.commit_slot` or a typed container such as `self.players[i].commit`,
+each optionally followed by one `.bind(...)` or `.unbind(n)`. Bound arguments are added to what the signal emits and unbound ones
+taken off, then the total has to fall between the method's required and total
+parameter counts, so a trailing default parameter is fine. Signals and methods of
+native classes count too, so `child_entered_tree.connect(self._reset)` is checked
+against `Node`'s signal and `changed.connect(self.queue_free)` against `Object`'s
+method.
+
+No verdict is given for anything that is not a method this can look up: a lambda,
+`Callable(self, "name")`, a local variable holding a Callable, a call that returns
+one, or a chain the walk cannot follow, which includes a signal owned by an
+untyped member or an untyped `Array`, and one reached through `$Path`.
+
 ### Methods used as conditions
 
 Forgetting the parentheses on a predicate does not fail — the reference is a
@@ -255,6 +288,14 @@ button.pressed.connect(self._on_press)   # fine
 
 Both `self.critters.any_enemy_walking` and the unqualified
 `critters.any_enemy_walking` are checked — see below.
+
+### Typed containers
+
+A subscript on a typed container steps into what it holds: `self.slots[i].pressed`
+reads `pressed` from `Button` when `slots` is declared `Array[Button]`, and a
+`Dictionary[K, V]` yields its `V`. An untyped `Array` or `Dictionary` stops the
+walk, as does a subscript on anything that is not a plain member, such as
+`get_children()[0]`.
 
 ### Qualified and unqualified access
 
@@ -769,6 +810,7 @@ For use with `--check`:
 | `script-load-failed` | Script does not compile (`--check-members` only) |
 | `unknown-member` | A name in a `self.foo.bar` chain resolves to nothing (`--check-members` only) |
 | `wrong-argument-count` | Signal emitted with the wrong argument count (`--check-members` only) |
+| `wrong-parameter-count` | Signal connected to a method that cannot take what it emits (`--check-members` only) |
 | `method-not-called` | Method used as a condition without being called (`--check-members` only) |
 | `unused-function` | Function nothing in the project references (`--check-unused-functions` only) |
 | `unguarded-export` | Object-typed `@export` with no null guard (`--check-exports` only) |

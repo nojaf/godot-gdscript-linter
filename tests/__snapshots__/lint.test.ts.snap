@@ -40,6 +40,19 @@ src/node_exports.gd:19  critical  unguarded-export  Export 'mentioned_not_tested
 src/resource_exports.gd:11  critical  unguarded-export  Export 'never_guarded' is never null-guarded; add assert(never_guarded != null, "...") or declare it optional with '= null'"
 `;
 
+exports[`fixtures handlers 1`] = `
+"src/listener.gd:47  critical  wrong-parameter-count  Handler '_one' takes 1 parameter(s), but signal 'changed' calls it with 2
+src/listener.gd:48  critical  wrong-parameter-count  Handler '_none' takes 0 parameter(s), but signal 'own_changed' calls it with 1
+src/listener.gd:49  critical  wrong-parameter-count  Handler '_one' takes 1 parameter(s), but signal 'fired' calls it with 0
+src/listener.gd:50  critical  wrong-parameter-count  Handler 'act' takes 2 parameter(s), but signal 'fired' calls it with 1 (0 emitted + 1 bound)
+src/listener.gd:51  critical  wrong-parameter-count  Handler '_one' takes 1 parameter(s), but signal 'changed' calls it with 0 (2 emitted - 2 unbound)
+src/listener.gd:52  critical  wrong-parameter-count  Handler '_none' takes 0 parameter(s), but signal 'child_entered_tree' calls it with 1
+src/listener.gd:53  critical  wrong-parameter-count  Handler 'queue_free' takes 0 parameter(s), but signal 'changed' calls it with 2
+src/listener.gd:54  critical  wrong-parameter-count  Handler '_one' takes 1 parameter(s), but signal 'pressed' calls it with 0
+src/listener.gd:55  critical  wrong-parameter-count  Handler '_one' takes 1 parameter(s), but signal 'changed' calls it with 2
+src/listener.gd:56  critical  wrong-parameter-count  Handler 'act' takes 2 parameter(s), but signal 'fired' calls it with 0"
+`;
+
 exports[`fixtures ignores 1`] = `
 "src/probe.gd:21  warning  print-statement  Debug print statement: print("reported: no directive covers this")
 src/probe.gd:30  warning  print-statement  Debug print statement: print("reported: no directive covers this either")
@@ -65,12 +78,13 @@ src/probe.gd:49  info  magic-number  Magic number 99 (consider using a named con
 `;
 
 exports[`fixtures members 1`] = `
-"src/probe.gd:21  warning  unknown-member  'settings' is declared as Resource, but 3 members are read from it that Resource does not have (brightness, difficulty, volume). FoldSettings has all of them: narrow the declaration to it, or cast at the use sites.
-src/probe.gd:33  critical  unknown-member  'clock_labl' is not a member of probe.gd (did you mean 'clock'?)
-src/probe.gd:37  critical  unknown-member  'txt' is not a member of Label
-src/probe.gd:38  critical  unknown-member  'tex' is not a member of Label (did you mean 'text'?)
-src/probe.gd:42  critical  wrong-argument-count  Signal 'panel_ready' emitted with 0 argument(s), expected 1
-src/probe.gd:43  critical  method-not-called  'helper' is a method used as a condition without being called; the reference is always true (did you mean 'helper()'?)"
+"src/probe.gd:23  warning  unknown-member  'settings' is declared as Resource, but 3 members are read from it that Resource does not have (brightness, difficulty, volume). FoldSettings has all of them: narrow the declaration to it, or cast at the use sites.
+src/probe.gd:39  critical  unknown-member  'clock_labl' is not a member of probe.gd (did you mean 'clock'?)
+src/probe.gd:43  critical  unknown-member  'txt' is not a member of Label
+src/probe.gd:44  critical  unknown-member  'tex' is not a member of Label (did you mean 'text'?)
+src/probe.gd:48  critical  unknown-member  'txt' is not a member of Label
+src/probe.gd:51  critical  wrong-argument-count  Signal 'panel_ready' emitted with 0 argument(s), expected 1
+src/probe.gd:52  critical  method-not-called  'helper' is a method used as a condition without being called; the reference is always true (did you mean 'helper()'?)"
 `;
 
 exports[`fixtures nodepaths 1`] = `

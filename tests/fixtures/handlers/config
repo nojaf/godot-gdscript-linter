@@ -1,0 +1,3 @@
+# flags: --check-members --check wrong-parameter-count
+# target: res://src
+# exit: 2

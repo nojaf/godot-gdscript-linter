@@ -9,18 +9,21 @@ extends RefCounted
 ## in, and what each file extends. The engine says what things mean: every member
 ## of a type including inherited ones, declared types, and signal arity.
 ##
-## Four findings, all CRITICAL:
-##   script-load-failed   - the script does not compile, so nothing in it can be
-##                          checked (Godot prints the parse error, on stderr)
-##   unknown-member       - a name in a chain is not a member of the type it is
-##                          read from
-##   wrong-argument-count - a signal is emitted with the wrong argument count
-##   method-not-called    - a method is used as a condition without being called
+## Five findings, all CRITICAL:
+##   script-load-failed    - the script does not compile, so nothing in it can be
+##                           checked (Godot prints the parse error, on stderr)
+##   unknown-member        - a name in a chain is not a member of the type it is
+##                           read from
+##   wrong-argument-count  - a signal is emitted with the wrong argument count
+##   wrong-parameter-count - a signal is connected to a method that cannot take
+##                           what it emits
+##   method-not-called     - a method is used as a condition without being called
 ##
 ## GDScript verifies none of these at parse time. Property access through `self`
 ## is resolved at runtime, property access on typed object variables is not
-## verified either, signal emit arity is not checked, and a bare method reference
-## in a condition is a Callable, which is always true.
+## verified either, signal arity is checked neither at the emit nor at the
+## connect, and a bare method reference in a condition is a Callable, which is
+## always true.
 ##
 ## Method call arity is deliberately absent: Godot's own parser rejects those, so
 ## a bad call surfaces here as script-load-failed instead.
@@ -30,6 +33,7 @@ const IssueClass = preload("res://addons/gdscript-linter/analyzer/issue.gd")
 const CHECK_LOAD_FAILED := "script-load-failed"
 const CHECK_UNKNOWN_MEMBER := "unknown-member"
 const CHECK_ARGUMENT_COUNT := "wrong-argument-count"
+const CHECK_PARAMETER_COUNT := "wrong-parameter-count"
 const CHECK_METHOD_NOT_CALLED := "method-not-called"
 
 ## Scripts overriding any of these can answer to names that exist in no member
@@ -43,6 +47,9 @@ var _respect_ignores: bool = true
 var _types := GDLintMemberTypes.new()
 # Decides how unknown members read through a typed member are reported.
 var _fold := GDLintWideReadFold.new(_types, CHECK_UNKNOWN_MEMBER)
+# The callable handed to each `.connect(...)` in the current file, keyed by the
+# source range of that argument. Built per file by _connect_callables_of.
+var _connect_callables := { }
 
 
 ## Run over the given res:// script paths, returning an Array of Issue.
@@ -143,6 +150,7 @@ func _check_file(index: GDLintSourceIndex, path: String, script: Script) -> Arra
 		_ignore_handler.initialize(_read_lines(path))
 
 	_fold.clear()
+	_connect_callables = _connect_callables_of(entry)
 	var root := _types.of_script(script)
 	var root_label := _script_label(path, script)
 	var locals := _locals_by_scope(entry)
@@ -222,14 +230,20 @@ func _check_chain(
 
 	# Stop where hop-by-hop resolution stops being valid. `self.get_thing().field`
 	# says nothing about the call's return type, and `$Clock.text` is not a member
-	# of the enclosing script.
+	# of the enclosing script. A subscript on a named member, `self.slots[i]`,
+	# does resolve when the member is a typed container; one on anything else
+	# carries no name and stops the walk.
 	var names: Array = []
+	var subscripted: Array = []
 	var last_is_call := false
 	for segment: Dictionary in segments:
 		var kind := String(segment.get("kind", ""))
-		if kind != "self" and kind != "identifier" and kind != "call":
+		if kind != "self" and kind != "identifier" and kind != "call" and kind != "subscript":
+			break
+		if not segment.has("name"):
 			break
 		names.append(String(segment.get("name", "")))
+		subscripted.append(kind == "subscript")
 		last_is_call = kind == "call"
 		if kind == "call":
 			break # the return type is unknown; nothing past this resolves
@@ -245,6 +259,7 @@ func _check_chain(
 
 	var current := root
 	var owner_label := root_label
+	var owner_class := root_label
 	var last := names.size() - 1
 
 	for index in range(start, names.size()):
@@ -262,10 +277,11 @@ func _check_chain(
 					name,
 					names.slice(start, index),
 					owner_label,
+					owner_class,
 					_types.closest_member(name, current.names),
 				)
 				return null
-			return _unknown_member(path, line, name, owner_label, current)
+			return _unknown_member(path, line, name, owner_class, current)
 
 		# A method used as a condition without being called. The reference is a
 		# Callable, which is always truthy, so the branch never branches.
@@ -278,16 +294,40 @@ func _check_chain(
 			var given: int = chain.get("arguments", []).size()
 			return _check_signal_arity(path, line, name, given, current.signals[name])
 
-		var next_class: String = current.types.get(name, "")
-		if next_class.is_empty():
+		# <signal>.connect(<callable>) -- the other end of the same contract.
+		if index == last - 1 and names[last] == "connect" and current.signals.has(name):
+			return _check_handler_arity(
+				path,
+				line,
+				name,
+				current.signals[name],
+				chain,
+				root,
+				locals,
+			)
+
+		var declared := _declared_type(current, name, subscripted[index])
+		if declared.is_empty():
 			return null
-		var next := _types.of_class(next_class)
+		var next := _types.of_class(declared.class)
 		if next.names.is_empty():
 			return null
 		current = next
-		owner_label = next_class
+		owner_label = declared.label
+		owner_class = declared.class
 
 	return null
+
+
+# What a hop reads from next: the declared type of a plain member, or the element
+# type of a subscripted one. Empty when the declaration does not say.
+func _declared_type(current: Dictionary, name: String, is_subscript: bool) -> Dictionary:
+	if is_subscript:
+		return current.elements.get(name, { })
+	var declared: String = current.types.get(name, "")
+	if declared.is_empty():
+		return { }
+	return { "class": declared, "label": declared }
 
 
 func _unknown_member(
@@ -336,6 +376,166 @@ func _check_signal_arity(path: String, line: int, signal_name: String, given: in
 		CHECK_ARGUMENT_COUNT,
 		"Signal '%s' emitted with %d argument(s), expected %d" % [signal_name, given, expected],
 	)
+
+
+# A signal calls its handler with exactly what it emits, plus whatever `.bind`
+# appended and minus whatever `.unbind` dropped. A GDScript method called with
+# more arguments than it declares, or fewer than it requires, is a runtime error
+# and the handler never runs. Godot checks this nowhere: not at parse, not at
+# connect, only when the signal fires.
+#
+# The callable is resolved from the index record sitting in the argument slot:
+# `self._on_x`, unqualified `_on_x`, a method reached through a typed member such
+# as `self.player.commit`, each optionally followed by one `.bind(...)` or
+# `.unbind(n)`. Anything else (a lambda, `Callable(self, "name")`, a local, a
+# call that returns a Callable) is not a method this can look up, and gives no
+# verdict.
+func _check_handler_arity(
+	path: String,
+	line: int,
+	signal_name: String,
+	emitted: int,
+	chain: Dictionary,
+	root: Dictionary,
+	locals: Dictionary,
+):
+	var arguments: Array = chain.get("arguments", [])
+	if arguments.is_empty():
+		return null
+	var record: Dictionary = _connect_callables.get(_range_key(arguments[0]), { })
+	if record.is_empty():
+		return null
+
+	var handler := _resolve_handler(record, root, locals)
+	if handler.is_empty() or bool(handler.arity.vararg):
+		return null
+
+	var given: int = emitted + int(handler.bound) - int(handler.unbound)
+	var required := int(handler.arity.required)
+	var total := int(handler.arity.total)
+	if given >= required and given <= total:
+		return null
+	if _respect_ignores and _ignore_handler.should_ignore(line, CHECK_PARAMETER_COUNT):
+		return null
+
+	var takes := str(required) if required == total else "%d to %d" % [required, total]
+	var message := (
+		"Handler '%s' takes %s parameter(s), but signal '%s' calls it with %d"
+		% [handler.name, takes, signal_name, given]
+	)
+	if int(handler.bound) > 0:
+		message += " (%d emitted + %d bound)" % [emitted, int(handler.bound)]
+	elif int(handler.unbound) > 0:
+		message += " (%d emitted - %d unbound)" % [emitted, int(handler.unbound)]
+	return IssueClass.create(
+		path,
+		line,
+		IssueClass.Severity.CRITICAL,
+		CHECK_PARAMETER_COUNT,
+		message,
+	)
+
+
+# The callable in every `.connect(...)` argument slot of a file, keyed by its
+# range. The index emits a nested record for the argument itself, tagged with
+# the callee it is an argument of, so the connect chain and the callable it was
+# handed are joined by position rather than by re-parsing the argument text.
+func _connect_callables_of(entry: Dictionary) -> Dictionary:
+	var callables := { }
+	for bucket in ["member_chains", "references"]:
+		for record: Dictionary in entry[bucket]:
+			var argument_of: Dictionary = record.get("argument_of", { })
+			if String(argument_of.get("callee", "")) != "connect":
+				continue
+			if int(argument_of.get("index", -1)) != 0:
+				continue
+			callables[_range_key(record)] = record
+	return callables
+
+
+static func _range_key(record: Dictionary) -> String:
+	var range: Dictionary = record.get("range", { })
+	return "%s:%s" % [range.get("start_byte", -1), range.get("end_byte", -1)]
+
+
+# The method a connect argument names, with its arity and how many arguments a
+# trailing `.bind(...)` adds or `.unbind(n)` removes. Empty when the argument is
+# not a method this can resolve.
+func _resolve_handler(record: Dictionary, root: Dictionary, locals: Dictionary) -> Dictionary:
+	var scope := String(record.get("scope", ""))
+	var names: Array = []
+	var subscripted: Array = []
+	var trailing_call := ""
+
+	if String(record.get("record", "")) == "reference":
+		if bool(record.get("is_call", false)):
+			return { } # a call that returns a Callable; nothing to look up
+		names.append(String(record.get("name", "")))
+		subscripted.append(false)
+	else:
+		var segments: Array = record.get("segments", [])
+		for position in range(segments.size()):
+			var segment: Dictionary = segments[position]
+			var kind := String(segment.get("kind", ""))
+			if kind == "call":
+				# Only a trailing bind/unbind is understood, and the chain's
+				# arguments belong to its last call, so the call must be last.
+				if position != segments.size() - 1:
+					return { }
+				trailing_call = String(segment.get("name", ""))
+				break
+			if kind != "self" and kind != "identifier" and kind != "subscript":
+				return { }
+			if not segment.has("name"):
+				return { }
+			names.append(String(segment.get("name", "")))
+			subscripted.append(kind == "subscript")
+
+	var bound := 0
+	var unbound := 0
+	var call_arguments: Array = record.get("arguments", [])
+	match trailing_call:
+		"":
+			pass
+		"bind":
+			bound = call_arguments.size()
+		"unbind":
+			if call_arguments.size() != 1:
+				return { }
+			var count := String(call_arguments[0].get("text", ""))
+			if not count.is_valid_int():
+				return { }
+			unbound = int(count)
+		_:
+			return { }
+
+	var start := 0
+	if not names.is_empty() and names[0] == "self":
+		start = 1
+	elif names.is_empty() or _is_shadowed(locals, scope, names[0]) or not root.names.has(names[0]):
+		return { }
+	if start >= names.size():
+		return { }
+
+	var current := root
+	for index in range(start, names.size()):
+		var name: String = names[index]
+		if index == names.size() - 1:
+			if subscripted[index] or not current.methods.has(name):
+				return { }
+			return {
+				"name": name,
+				"arity": current.methods[name],
+				"bound": bound,
+				"unbound": unbound,
+			}
+		var declared := _declared_type(current, name, subscripted[index])
+		if declared.is_empty():
+			return { }
+		current = _types.of_class(declared.class)
+		if current.names.is_empty():
+			return { }
+	return { }
 
 
 # Members of a loaded script: its own plus, already merged by the engine, those

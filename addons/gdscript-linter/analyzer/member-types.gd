@@ -5,8 +5,18 @@ extends RefCounted
 ## What the engine says a type contains.
 ##
 ## Every member of a class including inherited ones, the declared type of each,
-## signal arity, and which project class a name refers to. None of it is known by
-## line number, which is the other half and comes from GDLintSourceIndex.
+## signal arity, method arity, and which project class a name refers to. None of
+## it is known by line number, which is the other half and comes from
+## GDLintSourceIndex.
+##
+## `methods` maps each name to its arity: `required` parameters, `total`
+## parameters including those with defaults, and `vararg` when the method takes
+## any number. That is what decides whether a signal can call it.
+##
+## `elements` maps each typed container to what it holds: `class` is the element
+## type of an `Array[T]` or the value type of a `Dictionary[K, V]`, and `label`
+## is the declaration as written, for messages. A subscript steps through it the
+## way a plain member steps through `types`.
 ##
 ## Answers are cached per type. Resolving a script class loads it, and loading a
 ## script runs its @tool static initializers, so this asks for as few as it can:
@@ -38,6 +48,7 @@ func build_class_map() -> void:
 func of_script(script: Script) -> Dictionary:
 	var names := { }
 	var types := { }
+	var elements := { }
 	var signals := { }
 	var methods := { }
 
@@ -45,10 +56,10 @@ func of_script(script: Script) -> Dictionary:
 		# Drops the per-file category rows the property list interleaves.
 		if prop.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			names[prop.name] = true
-			_record_type(types, prop)
+			_record_type(types, elements, prop)
 	for method in script.get_script_method_list():
 		names[method.name] = true
-		methods[method.name] = true
+		methods[method.name] = _arity_of(method)
 	for signal_info in script.get_script_signal_list():
 		names[signal_info.name] = true
 		signals[signal_info.name] = signal_info.args.size()
@@ -60,17 +71,18 @@ func of_script(script: Script) -> Dictionary:
 		var native_members := of_native(native)
 		names.merge(native_members.names)
 		types.merge(native_members.types)
+		elements.merge(native_members.elements)
 		signals.merge(native_members.signals)
 		methods.merge(native_members.methods)
 
-	return { "names": names, "types": types, "signals": signals, "methods": methods }
+	return _members(names, types, elements, signals, methods)
 
 
 func of_class(class_name_str: String) -> Dictionary:
 	if _cache.has(class_name_str):
 		return _cache[class_name_str]
 
-	var resolved := { "names": { }, "types": { }, "signals": { }, "methods": { } }
+	var resolved := _members({ }, { }, { }, { }, { })
 	if _paths.has(class_name_str):
 		var script: Script = load(_paths[class_name_str]) as Script
 		if script != null and not script.get_instance_base_type().is_empty():
@@ -89,31 +101,95 @@ func of_native(native: String) -> Dictionary:
 
 	var names := { }
 	var types := { }
+	var elements := { }
 	var signals := { }
 	var methods := { }
 	for prop in ClassDB.class_get_property_list(native):
 		names[prop.name] = true
-		_record_type(types, prop)
+		_record_type(types, elements, prop)
 	for method in ClassDB.class_get_method_list(native):
 		names[method.name] = true
-		methods[method.name] = true
+		methods[method.name] = _arity_of(method)
 	for signal_info in ClassDB.class_get_signal_list(native):
 		names[signal_info.name] = true
 		signals[signal_info.name] = signal_info.args.size()
 	for constant in ClassDB.class_get_integer_constant_list(native):
 		names[constant] = true
 
-	var resolved := { "names": names, "types": types, "signals": signals, "methods": methods }
+	var resolved := _members(names, types, elements, signals, methods)
 	_cache[cache_key] = resolved
 	return resolved
 
 
-func _record_type(types: Dictionary, prop: Dictionary) -> void:
-	if prop.get("type", TYPE_NIL) != TYPE_OBJECT:
-		return
-	var declared := String(prop.get("class_name", ""))
-	if not declared.is_empty():
-		types[prop.name] = declared
+static func _members(
+	names: Dictionary,
+	types: Dictionary,
+	elements: Dictionary,
+	signals: Dictionary,
+	methods: Dictionary,
+) -> Dictionary:
+	return {
+		"names": names,
+		"types": types,
+		"elements": elements,
+		"signals": signals,
+		"methods": methods,
+	}
+
+
+# The engine reports a method's parameters and, separately, the defaults for
+# the trailing ones. Both the script and the ClassDB method lists use this shape.
+func _arity_of(method: Dictionary) -> Dictionary:
+	var total: int = method.get("args", []).size()
+	var defaults: int = method.get("default_args", []).size()
+	return {
+		"required": total - defaults,
+		"total": total,
+		"vararg": bool(int(method.get("flags", 0)) & METHOD_FLAG_VARARG),
+	}
+
+
+func _record_type(types: Dictionary, elements: Dictionary, prop: Dictionary) -> void:
+	var type: int = prop.get("type", TYPE_NIL)
+	if type == TYPE_OBJECT:
+		var declared := String(prop.get("class_name", ""))
+		if not declared.is_empty():
+			types[prop.name] = declared
+	elif type == TYPE_ARRAY:
+		var element := _element_class(prop)
+		if not element.is_empty():
+			elements[prop.name] = { "class": element, "label": "Array[%s]" % element }
+	elif type == TYPE_DICTIONARY:
+		var value := _element_class(prop)
+		if not value.is_empty():
+			var key := _decode_type(String(prop.get("hint_string", "")).get_slice(";", 0))
+			elements[prop.name] = { "class": value, "label": "Dictionary[%s, %s]" % [key, value] }
+
+
+# The element type of a typed container, or "" for an untyped one. The engine
+# writes it into the hint string, and a `Dictionary[K, V]` carries both halves
+# separated by `;`, of which the value is what a subscript yields.
+func _element_class(prop: Dictionary) -> String:
+	var hint: int = prop.get("hint", PROPERTY_HINT_NONE)
+	var hint_string := String(prop.get("hint_string", ""))
+	if hint == PROPERTY_HINT_ARRAY_TYPE or hint == PROPERTY_HINT_TYPE_STRING:
+		return _decode_type(hint_string)
+	if hint == PROPERTY_HINT_DICTIONARY_TYPE:
+		return _decode_type(hint_string.get_slice(";", hint_string.count(";")))
+	return ""
+
+
+# A plain `var x: Array[Button]` says `Button`; an `@export` one says
+# `24/34:Button`, which is `TYPE_OBJECT/PROPERTY_HINT_NODE_TYPE:Button`. Only an
+# object element can have members, so any other leading type yields nothing, and
+# a name that is not a class stops the walk downstream when it resolves to
+# nothing.
+func _decode_type(written: String) -> String:
+	if not written.contains("/"):
+		return written
+	if int(written.get_slice("/", 0)) != TYPE_OBJECT:
+		return ""
+	return written.substr(written.find(":") + 1)
 
 
 # similarity() is 0.0..1.0; below the threshold a suggestion is noise, not help.

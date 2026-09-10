@@ -62,7 +62,7 @@ how far each piece sits from something that could be.
 | Change | Commits | Could stand alone upstream |
 |--------|---------|------------------|
 | `--sarif`: SARIF 2.1.0 output, plus `--spaces` and `--output` for machine formats | `9b0d139`, `e7a2f8d` | Yes |
-| `--check-members`: verify member access, signal emit arity, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Only with the binary |
+| `--check-members`: verify member access, signal arity at emit and connect, uncalled predicates | `021d408`, `c5ecf83`, `e094370`, `c9e5012` | Only with the binary |
 | `--check-unused-functions`: report functions nothing references | `0afb2e9`, `3a29a41`, `956129b`, `365c50b`, `c250b8d` | Only with the binary |
 | `--check-exports`: object `@export` vars with no null guard | `83fc79d` | Only with the binary |
 | `--check-node-paths`: `$Path`, `%Name` and `get_node` that no attached scene has | not yet committed | Only with the binary |
@@ -132,8 +132,8 @@ The docs and CI examples now use `-o results.sarif`.
 
 ## `--check-members`
 
-Reports `script-load-failed`, `unknown-member`, `wrong-argument-count` and
-`method-not-called`. All are CRITICAL.
+Reports `script-load-failed`, `unknown-member`, `wrong-argument-count`,
+`wrong-parameter-count` and `method-not-called`. All are CRITICAL.
 
 The bug that started this: `self.clock_label` where the member is named `clock`.
 It compiled, and crashed on the first frame `_process` ran.
@@ -146,6 +146,7 @@ self.clock_labl.text = "x"   # clean: property access through self is dynamic
 self.clock.ziggy = "x"       # clean: property writes on typed object vars
                              #        are not verified either
 self.stopped_walking.emit()  # clean: signal emit arity is not verified
+self.stopped_walking.connect(self._on_stop)  # clean: nor is the handler's
 if self.any_enemy_walking:   # clean: a Callable is always true
 ```
 
@@ -165,6 +166,15 @@ Chains walk one hop at a time. The property list reports the declared type of ea
 member: `Label` for `var clock: Label`, or a script class name, which resolves to a
 file through the project's global class list. The walk stops as soon as a type
 cannot be determined, so an untyped member produces no verdict.
+
+A subscript on a typed container steps into what it holds: `self.slots[i].pressed`
+reads `pressed` from `Button` when `slots` is declared `Array[Button]`, and a
+`Dictionary[K, V]` yields its `V`. The engine writes the element type into the
+property hint, in one encoding for a plain `var` and another for an `@export`,
+and both are decoded. An untyped container stops the walk, as does a subscript on
+anything that is not a plain member, such as `get_children()[0]`. A wide-read
+fold through a container names the declaration as written, `Array[Node]`, and
+resolves candidates against the element.
 
 Chains work with or without the `self.` prefix. For an unqualified chain, the root identifier must be a member of the script. A
 local variable, a parameter or a loop variable in the same function must not
@@ -212,6 +222,19 @@ surfaces here as `script-load-failed`. Only signal emits pass the parser, so onl
 signal emits are checked. Signals have no default arguments, so the expected count
 is exact.
 
+**The handler side of a signal is checked too.** `wrong-parameter-count` is the
+same change seen from the connect: a signal gained a parameter, and the method
+wired to it still takes the old count. Godot verifies nothing at the connect, and
+the handler fails on the first emit. The callable in the argument slot is resolved
+the way any chain is, `self._on_x`, unqualified `_on_x`, or a method through a
+typed member, with one trailing `.bind(...)` adding to what is emitted or
+`.unbind(n)` taking from it. The result has to fall between the method's required
+and total parameters, which the engine reports per method along with its
+defaults, so a trailing default parameter is fine and a vararg method is never
+reported. Native signals and native methods are covered by the same member sets.
+Anything that is not a method this can name gives no verdict: a lambda,
+`Callable(self, "name")`, a local holding a Callable, a call returning one.
+
 **A method used as a condition is reported.** `if self.any_enemy_walking:` is a
 `Callable`, so the branch is always taken. Only truth tests are reported, which
 leaves the normal uses alone: assigning a `Callable`, or connecting a signal.
@@ -223,6 +246,8 @@ leaves the normal uses alone: assigning a `Callable`, or connecting a signal.
 - A broken base script reports the root cause with a count of its dependents.
 - A stale script class cache makes every script fail to load.
 - A call through an untyped variable cannot be resolved, by this or by Godot.
+- A connect on a signal reached through `$Path` or `%Name` is not checked: the
+  walk stops where the owner's type stops being known.
 
 ---
 

@@ -53,7 +53,8 @@ code that triggers it. Start there rather than here.
 | `declarations` | annotated and `static` declarations being skipped, and their contents being read off the raw line |
 | `ignores` | an ignore directive suppressing a function it does not name |
 | `broken` | a cascade of load failures folding into the script that broke |
-| `members` | the wide-declaration fold, and the three cases that must not fold |
+| `members` | the wide-declaration fold, the three cases that must not fold, and a read through a typed array's element |
+| `handlers` | a signal connected to a method that cannot take what it emits, through `bind`, `unbind`, defaults, native types and typed containers, and every callable shape that gives no verdict |
 | `signatures` | a declaration wrapped across lines being read from its first line only |
 | `exports` | every shape of null guard, and where a Node's guard has to live |
 | `unused` | what keeps a function alive, including callers that are scene data rather than code |
